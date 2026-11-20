@@ -153,7 +153,6 @@
     <div><label for="sampai">Sampai tahun</label><select id="sampai"></select></div>
   </div>
   <label for="bulan">Bulan</label><select id="bulan"><option value="">Semua bulan</option></select>
-  <label for="mitra">Mitra</label><select id="mitra"><option value="">Semua mitra</option></select>
   <label for="kawasan">Kawasan / desa</label><select id="kawasan"><option value="">Semua kawasan</option></select>
   <label for="tim">Tim patroli</label><select id="tim"><option value="">Semua tim</option></select>
   <label for="kategori">Kategori</label><select id="kategori"><option value="">Semua kategori</option></select>
@@ -362,7 +361,7 @@ function saringJalur(f) {
   const jam = m => `${Math.floor(m / 60)} j ${Math.round(m % 60)} m`;
   for (const p of patroli) {
     if (!p.jalur?.coordinates?.length) continue;
-    if (!(p.tahun >= f.dari && p.tahun <= f.sampai) || !bulanCocok(f, p.mulai) || (f.mitra && p.mitra !== f.mitra) || (f.kawasan && p.kawasan !== f.kawasan) || (f.tim && p.tim !== f.tim)) continue;
+    if (!(p.tahun >= f.dari && p.tahun <= f.sampai) || !bulanCocok(f, p.mulai) || (f.kawasan && p.kawasan !== f.kawasan) || (f.tim && p.tim !== f.tim)) continue;
     const warna = WARNA_JALUR[tims.indexOf(p.tim) % WARNA_JALUR.length];
     const nTemuan = semua.filter(r => r.patroli_id === p.id).length;
     const isi = `<div class="pop-judul">Patroli ${esc(p.tim || '')}</div><table>
@@ -384,7 +383,7 @@ function saringJalur(f) {
 
 // Effort & encounter rate (temuan per km). Hanya temuan yang terhubung ke patroli yang dihitung.
 function effort(f, data) {
-  const p = patroli.filter(x => x.tahun >= f.dari && x.tahun <= f.sampai && bulanCocok(f, x.mulai) && (!f.mitra || x.mitra === f.mitra) && (!f.kawasan || x.kawasan === f.kawasan) && (!f.tim || x.tim === f.tim));
+  const p = patroli.filter(x => x.tahun >= f.dari && x.tahun <= f.sampai && bulanCocok(f, x.mulai) && (!f.kawasan || x.kawasan === f.kawasan) && (!f.tim || x.tim === f.tim));
   const km = p.reduce((s, x) => s + x.km, 0), jam = p.reduce((s, x) => s + (+x.durasi_aktif_menit || 0), 0) / 60;
   const perId = new Map(p.map(x => [x.id, x]));
   // Temuan unik: observasi ganda di waypoint yang sama dengan kategori & jenis sama dihitung sekali.
@@ -503,14 +502,14 @@ const NAMA_BULAN = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Jul
 const bulanCocok = (f, iso) => !f.bulan || +String(iso || '').slice(5, 7) === f.bulan;
 
 function filter() {
-  return { dari: +$('dari').value, sampai: +$('sampai').value, bulan: +$('bulan').value || 0, mitra: $('mitra').value, kawasan: $('kawasan').value, tim: $('tim').value, kat: $('kategori').value, sub: $('sub').value, langgar: $('langgar').checked };
+  return { dari: +$('dari').value, sampai: +$('sampai').value, bulan: +$('bulan').value || 0, kawasan: $('kawasan').value, tim: $('tim').value, kat: $('kategori').value, sub: $('sub').value, langgar: $('langgar').checked };
 }
 
 function terapkan() {
   const f = filter();
   const data = semua.filter(r =>
     r.tahun >= f.dari && r.tahun <= f.sampai && bulanCocok(f, r.waktu) &&
-    (!f.mitra || r.mitra === f.mitra) && (!f.kawasan || r.kawasan === f.kawasan) && (!f.tim || r.tim === f.tim) && (!f.kat || r.kategori === f.kat) &&
+    (!f.kawasan || r.kawasan === f.kawasan) && (!f.tim || r.tim === f.tim) && (!f.kat || r.kategori === f.kat) &&
     (!f.sub || r.subkategori === f.sub) && (!f.langgar || r.pelanggaran === true));
 
   terfilter = data;
@@ -523,7 +522,7 @@ function terapkan() {
   $('sSpesies').textContent = fmt(unik(data.map(r => r.spesies_satwa)).length);
   effort(f, data);
   saringJalur(f);
-  $('rentang').textContent = `${f.bulan ? NAMA_BULAN[f.bulan - 1] + ' ' : ''}${f.dari}–${f.sampai}${f.mitra ? ' · ' + f.mitra : ''}${f.kawasan ? ' · ' + f.kawasan : ''}${f.tim ? ' · ' + f.tim : ''}${f.kat ? ' · ' + f.kat : ''}${f.sub ? ' · ' + f.sub : ''}${f.langgar ? ' · pelanggaran' : ''}`;
+  $('rentang').textContent = `${f.bulan ? NAMA_BULAN[f.bulan - 1] + ' ' : ''}${f.dari}–${f.sampai}${f.kawasan ? ' · ' + f.kawasan : ''}${f.tim ? ' · ' + f.tim : ''}${f.kat ? ' · ' + f.kat : ''}${f.sub ? ' · ' + f.sub : ''}${f.langgar ? ' · pelanggaran' : ''}`;
 
   // Per tahun, ditumpuk per kategori
   const tahun = []; for (let t = f.dari; t <= f.sampai; t++) tahun.push(t);
@@ -549,19 +548,18 @@ function terapkan() {
 }
 
 function isiSelect(el, nilai) { nilai.forEach(v => el.add(new Option(v, v))); }
-// Pilihan bertingkat: mitra -> kawasan -> tim. Pilihan lama dipertahankan bila masih ada.
+// Pilihan bertingkat: kawasan -> tim. Pilihan lama dipertahankan bila masih ada.
 function isiUlang(sel, nilai) {
   const lama = sel.value;
   sel.length = 1; isiSelect(sel, nilai);
   sel.value = [...sel.options].some(o => o.value === lama) ? lama : '';
 }
 function isiKawasan() {
-  const mt = $('mitra').value;
-  isiUlang($('kawasan'), unik(semua.filter(r => !mt || r.mitra === mt).map(r => r.kawasan)));
+  isiUlang($('kawasan'), unik(semua.map(r => r.kawasan)));
 }
 function isiTim() {
-  const mt = $('mitra').value, kw = $('kawasan').value;
-  isiUlang($('tim'), unik(semua.filter(r => (!mt || r.mitra === mt) && (!kw || r.kawasan === kw)).map(r => r.tim)));
+  const kw = $('kawasan').value;
+  isiUlang($('tim'), unik(semua.filter(r => !kw || r.kawasan === kw).map(r => r.tim)));
 }
 function isiSub() {
   const kat = $('kategori').value, sel = $('sub');
@@ -590,21 +588,19 @@ function legenda() {
   const tahun = unik(semua.map(r => r.tahun));
   isiSelect($('dari'), tahun); isiSelect($('sampai'), tahun);
   $('sampai').value = tahun[tahun.length - 1];
-  isiSelect($('mitra'), unik(semua.map(r => r.mitra)));
   isiKawasan();
   isiTim();
   isiSelect($('kategori'), unik(semua.map(r => r.kategori)));
   isiSub(); legenda();
   NAMA_BULAN.forEach((b, i) => $('bulan').add(new Option(b, i + 1)));
   ['dari', 'sampai', 'bulan', 'tim', 'sub', 'langgar', 'erSkala'].forEach(id => $(id).addEventListener('change', terapkan));
-  $('mitra').addEventListener('change', () => { isiKawasan(); isiTim(); terapkan(); fokus(); });
   $('kawasan').addEventListener('change', () => {
     isiTim(); terapkan(); fokus();
   });
   $('kategori').addEventListener('change', () => { isiSub(); terapkan(); });
   $('reset').addEventListener('click', () => {
     $('dari').value = tahun[0]; $('sampai').value = tahun[tahun.length - 1]; $('bulan').value = '';
-    $('mitra').value = ''; isiKawasan(); $('kawasan').value = ''; isiTim(); $('kategori').value = ''; isiSub(); $('langgar').checked = false; terapkan(); fokus();
+    isiKawasan(); $('kawasan').value = ''; isiTim(); $('kategori').value = ''; isiSub(); $('langgar').checked = false; terapkan(); fokus();
   });
   terapkan();
   fokus();
