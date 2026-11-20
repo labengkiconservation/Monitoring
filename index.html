@@ -62,6 +62,11 @@
   .legenda { display: grid; gap: 6px; }
   .legenda div { display: flex; align-items: center; gap: 8px; font-size: 13px; }
   .legenda svg { flex: none; }
+  .kotak-zona { flex: none; width: 22px; height: 16px; border-radius: 4px; border: 1.5px solid; }
+  .kotak-zona.grid { background: transparent; border: 1px dashed var(--laut-tua); }
+  .label-grid span { display: inline-block; font: 700 11px "Nunito", sans-serif; color: var(--laut-tua);
+                     text-shadow: 0 0 3px #fff, 0 0 3px #fff; white-space: nowrap; transform: translate(-50%, -50%); opacity: .8; }
+  .grid-jauh .label-grid { display: none; }
 
   /* Angka ringkasan */
   .angka { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
@@ -155,6 +160,9 @@
   <label for="sub">Jenis temuan</label><select id="sub"><option value="">Semua jenis</option></select>
   <label class="cek"><input type="checkbox" id="langgar"> Hanya pelanggaran</label>
   <button class="reset" id="reset">Atur ulang filter</button>
+
+  <h3>Zonasi TLGC</h3>
+  <div class="legenda" id="legendaZona"></div>
 
   <h3>Keterangan ikon</h3>
   <div class="legenda" id="legenda"></div>
@@ -313,6 +321,35 @@ async function muat() {
   if (res.ok) patroli = (await res.json()).map(p => ({ ...p, tahun: p.mulai ? +p.mulai.slice(0, 4) : null, km: (p.jarak_m ?? p.jarak_jalur_m ?? 0) / 1000 }));
 }
 let patroli = [];
+
+// Zonasi TLGC (kolom "Zona" dari zona_TLGC_Baru.shp) dan grid patroli 5×5 km (Grid_Patroli_TLGC_V2.shp).
+// Keduanya di bawah jalur dan ikon temuan; isi zona dibuat transparan supaya peta dasar tetap terbaca.
+const WARNA_ZONA = {
+  'Perlindungan': '#2E8B57', 'Pemanfaatan': '#1E6FB8', 'Rehabilitasi': '#F28A1E',
+  'Tradisional': '#C9A227', 'Tradisional Non TWA': '#8C6D46', 'Khusus': '#8E5BB5'
+};
+map.createPane('zona').style.zIndex = 350;
+map.createPane('grid').style.zIndex = 360;
+map.getPane('grid').style.pointerEvents = 'none';
+const lapisZona = L.geoJSON(null, {
+  pane: 'zona',
+  style: f => { const w = WARNA_ZONA[f.properties.Zona] || TLGC.abu; return { color: w, weight: 1.5, opacity: .85, fillColor: w, fillOpacity: .28 }; },
+  onEachFeature: (f, l) => l.bindTooltip(`Zona ${esc(f.properties.Zona || '-')}`, { sticky: true })
+}).addTo(map);
+const lapisGrid = L.layerGroup().addTo(map);
+kontrolLapis.addOverlay(lapisZona, 'Zonasi TLGC');
+kontrolLapis.addOverlay(lapisGrid, 'Grid patroli');
+fetch('data/zona-tlgc.geojson').then(r => r.json()).then(g => lapisZona.addData(g)).catch(() => {});
+fetch('data/grid-patroli-tlgc.geojson').then(r => r.json()).then(g => {
+  L.geoJSON(g, { pane: 'grid', interactive: false, style: { color: TLGC.lautTua, weight: 1, opacity: .55, dashArray: '4 4', fill: false } }).addTo(lapisGrid);
+  g.features.forEach(f => {
+    const c = L.geoJSON(f).getBounds().getCenter();
+    L.marker(c, { pane: 'grid', interactive: false, icon: L.divIcon({ className: 'label-grid', html: `<span>${esc(f.properties.kode || '')}</span>`, iconSize: [0, 0] }) }).addTo(lapisGrid);
+  });
+}).catch(() => {});
+// Label grid hanya saat cukup dekat, supaya tidak menumpuk.
+const aturLabelGrid = () => map.getContainer().classList.toggle('grid-jauh', map.getZoom() < 11);
+map.on('zoomend', aturLabelGrid); aturLabelGrid();
 
 // Lapisan jalur patroli: garis berwarna per tim, titik mulai & selesai.
 const WARNA_JALUR = ['#1E6FB8', '#F28A1E', '#D9432E', '#0E4D86', '#1AA6B7', '#2E8B57', '#8E5BB5'];
@@ -540,6 +577,9 @@ function legenda() {
   $('legenda').innerHTML = `<b style="font-size:12px;color:var(--muted)">Warna = kategori</b>${warna}
     <b style="font-size:12px;color:var(--muted);margin-top:6px">Ikon = jenis temuan</b>${ikon}
     <div>${svgIkon('lain', '#4A5A6B', true, 22)}Lingkar kuning = pelanggaran</div>`;
+  $('legendaZona').innerHTML = Object.entries(WARNA_ZONA).map(([z, w]) =>
+    `<div><span class="kotak-zona" style="background:${w}47;border-color:${w}"></span>${z}</div>`).join('')
+    + `<div><span class="kotak-zona grid"></span>Grid patroli 5×5 km</div>`;
 }
 
 (async () => {
