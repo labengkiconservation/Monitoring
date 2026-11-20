@@ -662,7 +662,7 @@ const Kelola = (() => {
     root.hidden = true;
     map.setView([r.lat, r.lon], 18);
     sorot?.remove();
-    sorot = L.circleMarker([r.lat, r.lon], { radius: 22, color: '#FFB432', weight: 4, fill: false }).addTo(map)
+    sorot = L.circleMarker([r.lat, r.lon], { radius: 22, color: '#FFC93C', weight: 4, fill: false }).addTo(map)
       .bindTooltip(`ID ${r.id} · ${esc(r.spesies_satwa || r.subkategori || r.kategori || '')}`, { permanent: true, direction: 'top' });
     setTimeout(() => sorot?.remove(), 8000);
   }
