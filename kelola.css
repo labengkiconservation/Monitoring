@@ -1,13 +1,13 @@
 /* Panel Kelola Data */
 #kelola { position: fixed; inset: 0; z-index: 3000; }
 #kelola[hidden] { display: none; }
-.k-latar { position: absolute; inset: 0; background: rgba(5, 25, 45, .55); }
+.k-latar { position: absolute; inset: 0; background: rgba(5, 35, 30, .55); }
 .k-kotak { position: absolute; inset: 24px; max-width: 1180px; margin: 0 auto; background: var(--pasir); border-radius: 16px;
            box-shadow: 0 20px 60px rgba(0,0,0,.35); display: flex; flex-direction: column; overflow: hidden; }
-.k-kepala { position: relative; background: var(--laut-tua); color: #fff; padding: 14px 18px 20px; display: flex; align-items: center; gap: 12px; flex: none; }
-.k-kepala::after { content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 6px; background: var(--jingga); }
+.k-kepala { position: relative; background: linear-gradient(90deg, var(--hijau-tlgc), var(--tosca-tlgc)); color: #fff;
+             text-shadow: 0 1px 2px rgba(10, 60, 50, .35); padding: 14px 18px; display: flex; align-items: center; gap: 12px; flex: none; }
 .k-kepala h2 { margin: 0; font-size: 18px; font-weight: 700; text-transform: uppercase; letter-spacing: .03em; }
-.k-kepala .k-siapa { margin-left: auto; font-size: 13px; color: var(--kuning); }
+.k-kepala .k-siapa { margin-left: auto; font-size: 13px; color: #fff; font-weight: 600; }
 .k-kepala button { background: transparent; color: #fff; border: 1px solid rgba(255,255,255,.4); border-radius: 999px; padding: 5px 12px; cursor: pointer; }
 .k-kepala .k-tutup { font-size: 18px; line-height: 1; padding: 4px 10px; }
 .k-badan { flex: 1; overflow: auto; padding: 18px; }

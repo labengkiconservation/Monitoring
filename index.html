@@ -9,34 +9,34 @@
 <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
 <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css">
-<link rel="stylesheet" href="kelola.css?v=20261120a">
+<link rel="stylesheet" href="kelola.css?v=20261120b">
 <style>
-  /* Palet TLGC (Toli Toli Labengki Giant Clam Conservation), diambil dari logo:
-     biru laut = kerang & tulisan, jingga = "Save Giant Clam", koral = bintang laut. */
+  /* Palet TLGC (Toli Toli Labengki Giant Clam Conservation), mengikuti situs resmi TLGC:
+     gradasi hijau daun -> tosca dengan teks putih. --laut / --laut-tua = tosca gelap untuk teks
+     dan tombol di latar terang (kontras cukup); koral & kuning dari logo untuk peringatan. */
   :root {
-    --laut-tua: #0E4D86; --laut: #1E6FB8; --koral: #D9432E; --jingga: #F28A1E; --kuning: #FFC93C;
-    --pasir: #F6F2EA; --ink: #102A43; --muted: #5A6B7B; --line: #DCE3EA;
-    --panel: rgba(246, 242, 234, .97); --shadow: 0 8px 28px rgba(10, 40, 70, .18);
+    --hijau-tlgc: #6ED670; --tosca-tlgc: #4CC4BE;
+    --laut-tua: #0B6B60; --laut: #0F8577; --koral: #D9432E; --jingga: #F28A1E; --kuning: #FFC93C;
+    --pasir: #F2FAF6; --ink: #12302B; --muted: #557069; --line: #D5EAE2;
+    --panel: rgba(242, 250, 246, .97); --shadow: 0 8px 28px rgba(10, 60, 50, .18);
   }
   * { box-sizing: border-box; }
   html, body { margin: 0; height: 100%; font-family: "Nunito", system-ui, sans-serif; color: var(--ink); background: var(--pasir); }
   button, select, input { font: inherit; }
 
   /* Kepala halaman */
-  .top { position: fixed; inset: 0 0 auto 0; height: 84px; z-index: 1000; background: var(--laut-tua); color: #fff;
-         display: flex; align-items: center; gap: 16px; padding: 0 20px 6px; }
-  /* Garis jingga di bawah header, seperti garis di bawah "Save Giant Clam" pada logo. */
-  .top::after { content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 6px; background: var(--jingga); }
-  /* Logo berlatar putih, jadi diberi kartu putih supaya rapi di atas biru tua. */
-  .top img { height: 60px; width: auto; background: #fff; border-radius: 10px; padding: 3px; }
-  .top .judul { line-height: 1.2; }
+  .top { position: fixed; inset: 0 0 auto 0; height: 84px; z-index: 1000; color: #fff;
+         background: linear-gradient(90deg, var(--hijau-tlgc), var(--tosca-tlgc));
+         display: flex; align-items: center; gap: 16px; padding: 0 20px; box-shadow: 0 2px 10px rgba(10, 60, 50, .15); }
+  /* Logo berlatar putih, jadi diberi kartu putih (bulat seperti logo di situs TLGC). */
+  .top img { height: 60px; width: auto; background: #fff; border-radius: 12px; padding: 3px; }
+  .top .judul { line-height: 1.2; text-shadow: 0 1px 2px rgba(10, 60, 50, .35); }
   .top h1 { margin: 0; font-weight: 800; font-size: 20px; letter-spacing: .02em; text-transform: uppercase; }
-  .top h1 span { color: var(--jingga); }
-  .top small { color: #cfe3f5; font-size: 13px; }
+  .top small { color: #fff; font-size: 13px; font-weight: 600; }
   .top .aksi { margin-left: auto; display: flex; gap: 8px; }
-  .top .aksi button { background: transparent; color: #fff; border: 1px solid rgba(255,255,255,.4); border-radius: 999px; padding: 6px 14px; cursor: pointer; font-size: 13px; }
-  .top .aksi button[aria-pressed="true"] { background: var(--kuning); color: var(--laut); border-color: var(--kuning); font-weight: 600; }
-  .top .aksi button.kelola { background: #fff; color: var(--laut); border-color: #fff; font-weight: 600; }
+  .top .aksi button { background: rgba(255,255,255,.15); color: #fff; border: 1px solid rgba(255,255,255,.75); border-radius: 999px; padding: 6px 14px; cursor: pointer; font-size: 13px; font-weight: 700; }
+  .top .aksi button[aria-pressed="true"] { background: #fff; color: var(--laut-tua); border-color: #fff; }
+  .top .aksi button.kelola { background: var(--laut-tua); color: #fff; border-color: var(--laut-tua); }
 
   #map { position: fixed; inset: 84px 0 0 0; }
 
@@ -81,7 +81,7 @@
   #status { font-size: 13px; color: var(--muted); }
 
   /* Klaster dan popup */
-  .marker-cluster { background: rgba(30, 111, 184, .25); }
+  .marker-cluster { background: rgba(15, 133, 119, .25); }
   .marker-cluster div { background: var(--laut); color: #fff; font-weight: 700; font-family: "Nunito", sans-serif; }
   .marker-cluster-medium { background: rgba(26, 166, 183, .3); }
   .marker-cluster-medium div { background: #1AA6B7; }
@@ -106,7 +106,7 @@
   .pop-galeri { display: grid; grid-template-columns: repeat(auto-fill, minmax(76px, 1fr)); gap: 4px; margin: 6px 0 8px; }
   .pop-foto { padding: 0; border: 0; background: var(--pasir); border-radius: 6px; overflow: hidden; cursor: zoom-in; aspect-ratio: 1; }
   .pop-foto img { width: 100%; height: 100%; object-fit: cover; display: block; }
-  #lightbox { position: fixed; inset: 0; z-index: 4000; background: rgba(5, 25, 45, .9); display: flex; align-items: center; justify-content: center; padding: 16px; }
+  #lightbox { position: fixed; inset: 0; z-index: 4000; background: rgba(5, 35, 30, .9); display: flex; align-items: center; justify-content: center; padding: 16px; }
   #lightbox[hidden] { display: none; }
   #lightbox img { max-width: 100%; max-height: 100%; border-radius: 8px; }
   #lightboxTutup { position: absolute; top: 14px; right: 14px; background: #fff; color: var(--laut); border: 0; border-radius: 999px; width: 40px; height: 40px; font-size: 22px; cursor: pointer; }
@@ -215,7 +215,7 @@
 const KOLOM = 'id,patroli_id,waypoint_id,foto,mitra,desa,kelompok,kawasan,tim,waktu,lon,lat,kategori,subkategori,jenis_observasi,spesies_satwa,spesies_tumbuhan,jenis_kelamin,umur,jumlah,satuan,total_orang,pelanggaran,tindakan,kondisi_fitur';
 
 // Palet TLGC (sama dengan variabel CSS di atas) + warna alam laut untuk kategori.
-const TLGC = { lautTua: '#0E4D86', laut: '#1E6FB8', koral: '#D9432E', jingga: '#F28A1E', kuning: '#FFC93C',
+const TLGC = { lautTua: '#0B6B60', laut: '#0F8577', koral: '#D9432E', jingga: '#F28A1E', kuning: '#FFC93C',
   tosca: '#1AA6B7', mangrove: '#2E8B57', abu: '#7D8B99' };
 const WARNA_KAT = {
   'Satwa Liar': TLGC.laut, 'Aktivitas Manusia': TLGC.jingga, 'Tumbuhan': TLGC.mangrove, 'Fitur': TLGC.lautTua,
@@ -410,7 +410,7 @@ function effort(f, data) {
     borderColor: TLGC.koral, backgroundColor: TLGC.koral, tension: .25, borderWidth: 2,
     pointRadius: hari.map(t => kmPer.get(t) < 1 ? 3 : 5), pointStyle: hari.map(t => kmPer.get(t) < 1 ? 'crossRot' : 'circle')
   }], {
-    scales: { x: { grid: { display: false }, ticks: { maxTicksLimit: 8 } }, y: { beginAtZero: true, grid: { color: '#e3e9ef' }, title: { display: true, text: 'temuan / km' } } },
+    scales: { x: { grid: { display: false }, ticks: { maxTicksLimit: 8 } }, y: { beginAtZero: true, grid: { color: '#dcece5' }, title: { display: true, text: 'temuan / km' } } },
     plugins: { tooltip: { callbacks: { label: c => {
       const t = hari[c.dataIndex], km = kmPer.get(t);
       return [`${c.parsed.y.toLocaleString('id-ID')} temuan/km`, `${temuanHari[c.dataIndex]} temuan unik · ${km.toLocaleString('id-ID', { maximumFractionDigits: 2 })} km`, ...(km < 1 ? ['effort < 1 km: belum stabil'] : [])];
@@ -486,17 +486,17 @@ function popup(r) {
 // Grafik
 Chart.defaults.font.family = '"Nunito", sans-serif';
 Chart.defaults.font.size = 11;
-Chart.defaults.color = '#5A6B7B';
+Chart.defaults.color = '#557069';
 Chart.defaults.plugins.legend.display = false;
 const grafik = {};
 function gambar(id, type, labels, datasets, opsi = {}) {
-  const options = Object.assign({ responsive: true, animation: { duration: 300 }, scales: { x: { grid: { display: false } }, y: { beginAtZero: true, grid: { color: '#e3e9ef' } } } }, opsi);
+  const options = Object.assign({ responsive: true, animation: { duration: 300 }, scales: { x: { grid: { display: false } }, y: { beginAtZero: true, grid: { color: '#dcece5' } } } }, opsi);
   if (grafik[id]) { Object.assign(grafik[id], { options }); grafik[id].data.labels = labels; grafik[id].data.datasets = datasets; grafik[id].update(); return; }
   grafik[id] = new Chart($(id), { type, data: { labels, datasets }, options });
 }
 const hitung = (data, f) => data.reduce((m, r) => { const k = f(r); if (k) m[k] = (m[k] || 0) + 1; return m; }, {});
 const teratas = (obj, n) => Object.entries(obj).sort((a, b) => b[1] - a[1]).slice(0, n);
-const horizontal = { indexAxis: 'y', scales: { x: { beginAtZero: true, grid: { color: '#e3e9ef' } }, y: { grid: { display: false } } } };
+const horizontal = { indexAxis: 'y', scales: { x: { beginAtZero: true, grid: { color: '#dcece5' } }, y: { grid: { display: false } } } };
 
 const NAMA_BULAN = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'];
 const bulanCocok = (f, iso) => !f.bulan || +String(iso || '').slice(5, 7) === f.bulan;
@@ -530,12 +530,12 @@ function terapkan() {
   gambar('gTahun', 'bar', tahun, kats.map(k => ({
     label: k, backgroundColor: WARNA_KAT[k] || TLGC.abu, borderRadius: 3,
     data: tahun.map(t => data.filter(r => r.tahun === t && r.kategori === k).length)
-  })), { plugins: { legend: { display: true, position: 'bottom', labels: { boxWidth: 10 } } }, scales: { x: { stacked: true, grid: { display: false } }, y: { stacked: true, beginAtZero: true, grid: { color: '#e3e9ef' } } } });
+  })), { plugins: { legend: { display: true, position: 'bottom', labels: { boxWidth: 10 } } }, scales: { x: { stacked: true, grid: { display: false } }, y: { stacked: true, beginAtZero: true, grid: { color: '#dcece5' } } } });
 
   const perBulan = hitung(data, r => r.bulan);
   const bulan = Object.keys(perBulan).sort();
-  gambar('gBulan', 'line', bulan, [{ data: bulan.map(b => perBulan[b]), borderColor: TLGC.laut, backgroundColor: 'rgba(30,111,184,.12)', fill: true, tension: .3, pointRadius: 0, borderWidth: 2 }],
-    { scales: { x: { grid: { display: false }, ticks: { maxTicksLimit: 6 } }, y: { beginAtZero: true, grid: { color: '#e3e9ef' } } } });
+  gambar('gBulan', 'line', bulan, [{ data: bulan.map(b => perBulan[b]), borderColor: TLGC.laut, backgroundColor: 'rgba(15,133,119,.12)', fill: true, tension: .3, pointRadius: 0, borderWidth: 2 }],
+    { scales: { x: { grid: { display: false }, ticks: { maxTicksLimit: 6 } }, y: { beginAtZero: true, grid: { color: '#dcece5' } } } });
 
   const ancaman = teratas(hitung(data.filter(r => r.kategori === 'Aktivitas Manusia'), r => r.subkategori), 8);
   gambar('gAncaman', 'bar', ancaman.map(a => a[0]), [{ data: ancaman.map(a => a[1]), backgroundColor: TLGC.jingga, borderRadius: 3 }], horizontal);
@@ -571,10 +571,10 @@ function legenda() {
   // Warna = kategori, ikon = jenis temuan.
   const warna = Object.entries(WARNA_KAT).map(([k, w]) => `<div>${svgIkon('titik', w, false, 22)}${k}</div>`).join('');
   const ikon = [...JENIS.map(([, g, nama]) => [g, nama]), ['daun', 'Tumbuhan'], ['rumah', 'Fitur / sarana']]
-    .map(([g, nama]) => `<div>${svgIkon(g, '#4A5A6B', false, 22)}${nama}</div>`).join('');
+    .map(([g, nama]) => `<div>${svgIkon(g, '#3F5A54', false, 22)}${nama}</div>`).join('');
   $('legenda').innerHTML = `<b style="font-size:12px;color:var(--muted)">Warna = kategori</b>${warna}
     <b style="font-size:12px;color:var(--muted);margin-top:6px">Ikon = jenis temuan</b>${ikon}
-    <div>${svgIkon('lain', '#4A5A6B', true, 22)}Lingkar kuning = pelanggaran</div>`;
+    <div>${svgIkon('lain', '#3F5A54', true, 22)}Lingkar kuning = pelanggaran</div>`;
   $('legendaZona').innerHTML = Object.entries(WARNA_ZONA).map(([z, w]) =>
     `<div><span class="kotak-zona" style="background:${w}47;border-color:${w}"></span>${z}</div>`).join('')
     + `<div><span class="kotak-zona grid"></span>Grid patroli 5×5 km</div>`;
