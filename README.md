@@ -16,6 +16,10 @@ Selama `config.js` kosong, halaman menampilkan "Database belum disiapkan".
 
 ## Database
 
+Proyek Supabase baru disiapkan dengan menjalankan `supabase/setup.sql` sekali
+(SQL Editor → tempel → Run). Ganti `GANTI_EMAIL_ADMIN` dulu dengan email akun
+admin, lalu buat akun itu di Authentication → Users → Add user.
+
 Tabel yang dipakai: `patroli`, `temuan_patroli`, `unggahan`, `kamus`, dan
 storage bucket publik `foto-temuan`. Akses tulis lewat panel Kelola Data
 memakai login email/password Supabase; keamanan diatur oleh RLS di database.
