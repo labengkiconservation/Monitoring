@@ -1,0 +1,62 @@
+{
+ "sumber": "Allen Coral Atlas v2.0 (habitat bentik, 2020), CC-BY-4.0, doi:10.5281/zenodo.3833242; luas dari poligon asli 5 m",
+ "satuan": "ha",
+ "zona": {
+  "Perlindungan": {
+   "Seagrass": 39.91,
+   "Coral/Algae": 130.73,
+   "Rock": 34.8,
+   "Rubble": 5.72
+  },
+  "Pemanfaatan": {
+   "Coral/Algae": 149.79,
+   "Rock": 146.09,
+   "Seagrass": 19.25,
+   "Rubble": 33.17,
+   "Sand": 8.68,
+   "Microalgal Mats": 0.13
+  },
+  "Rehabilitasi": {
+   "Coral/Algae": 45.45,
+   "Seagrass": 54.19,
+   "Rock": 20.17,
+   "Rubble": 5.22,
+   "Sand": 0.29
+  },
+  "Tradisional": {
+   "Coral/Algae": 555.54,
+   "Seagrass": 969.65,
+   "Rock": 94.03,
+   "Rubble": 16.4,
+   "Sand": 4.4
+  },
+  "Tradisional Non TWA": {
+   "Coral/Algae": 18.9,
+   "Rock": 0.57,
+   "Seagrass": 0.29
+  },
+  "Khusus": {
+   "Coral/Algae": 324.54,
+   "Seagrass": 1113.25,
+   "Rock": 12.28,
+   "Rubble": 8.16,
+   "Sand": 0.36
+  },
+  "Di luar zona": {
+   "Coral/Algae": 1653.72,
+   "Seagrass": 3480.32,
+   "Rock": 248.65,
+   "Rubble": 103.21,
+   "Sand": 4.45,
+   "Microalgal Mats": 0.19
+  }
+ },
+ "total": {
+  "Coral/Algae": 2878.67,
+  "Seagrass": 5676.86,
+  "Rock": 556.59,
+  "Rubble": 171.88,
+  "Sand": 18.18,
+  "Microalgal Mats": 0.32
+ }
+}

@@ -163,6 +163,9 @@
   <h3>Zonasi TLGC</h3>
   <div class="legenda" id="legendaZona"></div>
 
+  <h3>Habitat terumbu (ACA)</h3>
+  <div class="legenda" id="legendaHabitat"></div>
+
   <h3>Keterangan ikon</h3>
   <div class="legenda" id="legenda"></div>
 </aside>
@@ -204,6 +207,10 @@
   <div class="grafik"><canvas id="gSpesies" height="260"></canvas></div>
   <h3>Temuan per tim</h3>
   <div class="grafik"><canvas id="gTim" height="170"></canvas></div>
+  <h3>Habitat terumbu per zona (ha)</h3>
+  <div class="grafik"><canvas id="gHabitat" height="260"></canvas></div>
+  <p class="ket" style="margin:6px 0 0" id="habitatLuar"></p>
+  <p class="ket" style="margin:6px 0 0">Sumber: Allen Coral Atlas v2.0, habitat bentik dari citra satelit 5 m (2020), CC-BY-4.0. Luas dihitung dari poligon asli; tidak ikut filter temuan.</p>
 </aside>
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -349,6 +356,34 @@ fetch('data/grid-patroli-tlgc.geojson').then(r => r.json()).then(g => {
 // Label grid hanya saat cukup dekat, supaya tidak menumpuk.
 const aturLabelGrid = () => map.getContainer().classList.toggle('grid-jauh', map.getZoom() < 11);
 map.on('zoomend', aturLabelGrid); aturLabelGrid();
+
+// Habitat bentik Allen Coral Atlas v2.0 (nama & warna kelas resmi ACA), digabung per kelas
+// dan disederhanakan untuk tampilan (data/habitat-aca-tlgc.geojson). Di atas zonasi, di bawah grid.
+const WARNA_HABITAT = {
+  'Coral/Algae': '#ff6161', 'Seagrass': '#668438', 'Rock': '#b19c3a',
+  'Rubble': '#e0d05e', 'Sand': '#ffffbe', 'Microalgal Mats': '#9bcc4f'
+};
+map.createPane('habitat').style.zIndex = 355;
+const lapisHabitat = L.geoJSON(null, {
+  pane: 'habitat',
+  style: f => { const w = WARNA_HABITAT[f.properties.kelas] || TLGC.abu; return { stroke: false, fillColor: w, fillOpacity: .6 }; },
+  onEachFeature: (f, l) => l.bindTooltip(esc(f.properties.kelas || '-'), { sticky: true })
+}).addTo(map);
+kontrolLapis.addOverlay(lapisHabitat, 'Habitat terumbu (ACA)');
+fetch('data/habitat-aca-tlgc.geojson').then(r => r.json()).then(g => lapisHabitat.addData(g)).catch(() => {});
+
+// Luas habitat per zona (dihitung dari poligon asli 5 m, lihat data/habitat-per-zona.json).
+fetch('data/habitat-per-zona.json').then(r => r.json()).then(d => {
+  // "Di luar zona" jauh lebih besar dari zona TLGC, jadi disebut di catatan saja, bukan di grafik.
+  const zona = Object.keys(d.zona).filter(z => z !== 'Di luar zona');
+  const luar = d.zona['Di luar zona'] || {};
+  $('habitatLuar').textContent = `Di luar zonasi TLGC (dalam area kerja): Coral/Algae ${fmt(luar['Coral/Algae'] || 0)} ha, Seagrass ${fmt(luar['Seagrass'] || 0)} ha.`;
+  gambar('gHabitat', 'bar', zona, Object.keys(WARNA_HABITAT).map(k => ({
+    label: k, data: zona.map(z => d.zona[z][k] || 0), backgroundColor: WARNA_HABITAT[k], borderRadius: 2
+  })), { indexAxis: 'y', plugins: { legend: { display: true, position: 'bottom', labels: { boxWidth: 10 } },
+    tooltip: { callbacks: { label: c => `${c.dataset.label}: ${fmt(c.raw)} ha` } } },
+    scales: { x: { stacked: true, beginAtZero: true, grid: { color: '#dcece5' } }, y: { stacked: true, grid: { display: false } } } });
+}).catch(() => {});
 
 // Lapisan jalur patroli: garis berwarna per tim, titik mulai & selesai.
 const WARNA_JALUR = ['#1E6FB8', '#F28A1E', '#D9432E', '#0E4D86', '#1AA6B7', '#2E8B57', '#8E5BB5'];
@@ -578,6 +613,8 @@ function legenda() {
   $('legendaZona').innerHTML = Object.entries(WARNA_ZONA).map(([z, w]) =>
     `<div><span class="kotak-zona" style="background:${w}47;border-color:${w}"></span>${z}</div>`).join('')
     + `<div><span class="kotak-zona grid"></span>Grid patroli 5×5 km</div>`;
+  $('legendaHabitat').innerHTML = Object.entries(WARNA_HABITAT).map(([k, w]) =>
+    `<div><span class="kotak-zona" style="background:${w}99;border-color:${w}"></span>${k}</div>`).join('');
 }
 
 (async () => {
