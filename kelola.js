@@ -779,5 +779,29 @@ const Kelola = (() => {
     pesan('kPesanRiwayat', 'ok', 'Unggahan dibatalkan; temuannya ada di Sampah.');
   });
 
-  return { buka };
+  // Untuk laporan versi internal: cek admin dan ambil kolom privat dengan sesi login (RLS tetap berlaku).
+  async function adminAktif() {
+    if (!sb) return false;
+    const { data: { session } } = await sb.auth.getSession();
+    if (!session) return false;
+    const { data } = await sb.rpc('is_admin');
+    return data === true;
+  }
+  async function dataPrivat(idTemuan, idPatroli) {
+    const ambil = async (tabel, kolom, ids) => {
+      const hasil = {};
+      for (let i = 0; i < ids.length; i += 200) {
+        const { data, error } = await sb.from(tabel).select(kolom).in('id', ids.slice(i, i + 200));
+        if (error) throw error;
+        data.forEach(r => hasil[r.id] = r);
+      }
+      return hasil;
+    };
+    return {
+      temuan: await ambil('temuan_patroli', 'id,nama,info_lain,nama_kapal:atribut->>a_boatname,nakhoda:atribut->>a_captain', idTemuan),
+      patroli: await ambil('patroli', 'id,ketua_tim,anggota', idPatroli)
+    };
+  }
+
+  return { buka, adminAktif, dataPrivat };
 })();
