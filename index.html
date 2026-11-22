@@ -70,6 +70,10 @@
   .label-grid span { display: inline-block; font: 700 11px "Nunito", sans-serif; color: var(--laut-tua);
                      text-shadow: 0 0 3px #fff, 0 0 3px #fff; white-space: nowrap; transform: translate(-50%, -50%); opacity: .8; }
   .label-grid small { display: block; font-size: 10px; font-weight: 600; text-align: center; }
+  .dukungan-ypi { display: flex !important; align-items: center; gap: 6px; background: rgba(255,255,255,.92); border-radius: 6px;
+                  padding: 3px 8px; margin: 0 6px 6px 0 !important; text-decoration: none; box-shadow: 0 1px 4px rgba(0,0,0,.15); }
+  .dukungan-ypi span { font-size: 10px; font-weight: 600; color: var(--muted); white-space: nowrap; }
+  .dukungan-ypi img { height: 24px; width: auto; display: block; }
   .grid-jauh .label-grid { display: none; }
   .tabel-mini td.sel-nol { color: var(--muted); }
 
@@ -314,6 +318,15 @@ const citra = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/
 const osm = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '&copy; OpenStreetMap' }).addTo(map);
 const kontrolLapis = L.control.layers({ 'Peta jalan': osm, 'Citra satelit': citra }, null, { position: 'bottomright' }).addTo(map);
 L.control.scale({ position: 'bottomleft', imperial: false }).addTo(map);
+// Tanda dukungan YPI, paling bawah di pojok kanan (di bawah atribusi peta).
+const dukungan = L.control({ position: 'bottomright' });
+dukungan.onAdd = () => Object.assign(L.DomUtil.create('a', 'dukungan-ypi'), {
+  href: 'https://www.planetindonesia.org', target: '_blank', rel: 'noopener',
+  innerHTML: '<span>Supported by</span><img src="assets/logo-ypi.png" alt="Yayasan Planet Indonesia">'
+});
+dukungan.addTo(map);
+const elDukungan = dukungan.getContainer();
+elDukungan.parentNode.appendChild(elDukungan);
 const cluster = L.markerClusterGroup({ chunkedLoading: true, maxClusterRadius: 50, showCoverageOnHover: false }).addTo(map);
 
 // Panel buka-tutup
