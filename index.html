@@ -69,7 +69,9 @@
   .kotak-zona.grid { background: transparent; border: 1px dashed var(--laut-tua); }
   .label-grid span { display: inline-block; font: 700 11px "Nunito", sans-serif; color: var(--laut-tua);
                      text-shadow: 0 0 3px #fff, 0 0 3px #fff; white-space: nowrap; transform: translate(-50%, -50%); opacity: .8; }
+  .label-grid small { display: block; font-size: 10px; font-weight: 600; text-align: center; }
   .grid-jauh .label-grid { display: none; }
+  .tabel-mini td.sel-nol { color: var(--muted); }
 
   /* Angka ringkasan */
   .angka { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
@@ -192,6 +194,13 @@
     <div class="merah"><b id="eRate">–</b><span id="eRateKet">temuan per km</span></div>
   </div>
   <p class="ket" id="eCatatan" style="margin-top:8px"></p>
+  <h3>Cakupan grid patroli</h3>
+  <div class="angka">
+    <div><b id="gCakup">–</b><span>luas grid terjangkau</span></div>
+    <div class="kuning"><b id="gSel">–</b><span>sel grid dikunjungi</span></div>
+  </div>
+  <p class="ket" id="gCatatan" style="margin-top:8px"></p>
+  <div class="grafik tabel-mini"><table id="tGrid"></table></div>
   <h3>Tren encounter rate</h3>
   <div class="baris" style="align-items:end;margin:0 0 6px">
     <div><label for="erSkala" style="margin-top:0">Tampilkan per</label>
@@ -365,12 +374,76 @@ const lapisGrid = L.layerGroup().addTo(map);
 kontrolLapis.addOverlay(lapisZona, 'Zonasi TLGC');
 kontrolLapis.addOverlay(lapisGrid, 'Grid patroli');
 fetch('data/zona-tlgc.geojson').then(r => r.json()).then(g => lapisZona.addData(g)).catch(() => {});
+// ---------- Cakupan grid ----------
+// Jalur dipecah tiap ±25 m; tiap potongan masuk sel tempat titik tengahnya jatuh.
+// Persentase cakupan menghitung tiap sel paling banyak sekali; km, jumlah patroli, dan bulan adalah intensitas.
+let gridSel = null, sudahSiap = false;
+const RAD = Math.PI / 180, R_BUMI = 6371008.8;
+const poligon = geo => geo.type === 'Polygon' ? [geo.coordinates] : geo.type === 'MultiPolygon' ? geo.coordinates : [];
+const dalamRing = ([x, y], r) => { let d = false; for (let a = 0, b = r.length - 1; a < r.length; b = a++) { const [xi, yi] = r[a], [xj, yj] = r[b]; if ((yi > y) !== (yj > y) && x < (xj - xi) * (y - yi) / (yj - yi) + xi) d = !d; } return d; };
+const dalamGeo = (p, geo) => poligon(geo).some(pl => dalamRing(p, pl[0]) && !pl.slice(1).some(h => dalamRing(p, h)));
+const luasRing = r => { let s = 0; for (let i = 0; i < r.length - 1; i++) s += (r[i + 1][0] - r[i][0]) * RAD * (2 + Math.sin(r[i][1] * RAD) + Math.sin(r[i + 1][1] * RAD)); return Math.abs(s * R_BUMI ** 2 / 2); };
+const jarakM2 = ([a, b], [c, d]) => Math.hypot((c - a) * RAD * Math.cos((b + d) / 2 * RAD), (d - b) * RAD) * R_BUMI;
+function cakupanGrid(pat, temuan) {
+  if (!gridSel) return null;
+  const sel = gridSel.map(s => ({ ...s, km: 0, patroli: new Set(), bulan: new Set(), temuan: 0 }));
+  const cari = p => sel.find(s => p[0] >= s.bb[0] && p[0] <= s.bb[2] && p[1] >= s.bb[1] && p[1] <= s.bb[3] && dalamGeo(p, s.geo));
+  let kmLuar = 0;
+  for (const x of pat) {
+    if (!x.jalur) continue;
+    const segs = x.jalur.type === 'MultiLineString' ? x.jalur.coordinates : [x.jalur.coordinates];
+    for (const s of segs) for (let i = 1; i < s.length; i++) {
+      const d = jarakM2(s[i - 1], s[i]), n = Math.max(1, Math.ceil(d / 25));
+      for (let k = 0; k < n; k++) {
+        const t = (k + .5) / n, c = cari([s[i - 1][0] + (s[i][0] - s[i - 1][0]) * t, s[i - 1][1] + (s[i][1] - s[i - 1][1]) * t]);
+        if (c) { c.km += d / n / 1000; c.patroli.add(x.id); c.bulan.add(x.mulai.slice(0, 7)); } else kmLuar += d / n / 1000;
+      }
+    }
+  }
+  for (const r of temuan) { const c = cari([r.lon, r.lat]); if (c) c.temuan++; }
+  const kunj = sel.filter(s => s.km > 0), km2 = sel.reduce((a, s) => a + s.km2, 0), km2Kunj = kunj.reduce((a, s) => a + s.km2, 0);
+  return { sel, kunj, km2, km2Kunj, persen: km2 ? km2Kunj / km2 * 100 : 0, kmLuar };
+}
+// Kelas intensitas (km jalur per sel) untuk warna peta & legenda.
+const KELAS_GRID = [[200, .62, '> 200 km'], [50, .45, '50–200 km'], [10, .3, '10–50 km'], [0, .16, '< 10 km']];
+const WARNA_GRID = '#0B6B60';
+const kelasGrid = km => KELAS_GRID.find(([b]) => km > b);
+function gambarGrid(cak) {
+  lapisGrid.clearLayers();
+  if (!gridSel) return;
+  const perKode = new Map((cak?.sel || []).map(s => [s.kode, s]));
+  for (const g of gridSel) {
+    const s = perKode.get(g.kode), k = s?.km > 0 && kelasGrid(s.km);
+    L.geoJSON(g.geo, { pane: 'grid', interactive: false, style: k
+      ? { color: WARNA_GRID, weight: 1.2, opacity: .8, fillColor: WARNA_GRID, fillOpacity: k[1] }
+      : { color: TLGC.lautTua, weight: 1, opacity: .55, dashArray: '4 4', fill: false } }).addTo(lapisGrid);
+    const isi = `${esc(g.kode)}${s?.km > 0 ? `<small>${Math.round(s.km).toLocaleString('id-ID')} km · ${s.patroli.size} ptr</small>` : ''}`;
+    L.marker(g.pusat, { pane: 'grid', interactive: false, icon: L.divIcon({ className: 'label-grid', html: `<span>${isi}</span>`, iconSize: [0, 0] }) }).addTo(lapisGrid);
+  }
+}
+function tampilCakupan(c) {
+  gambarGrid(c);
+  if (!c) { $('gCakup').textContent = $('gSel').textContent = '–'; $('gCatatan').textContent = ''; $('tGrid').innerHTML = ''; return; }
+  const satu = v => v.toLocaleString('id-ID', { maximumFractionDigits: 1 });
+  $('gCakup').textContent = `${satu(c.persen)}%`;
+  $('gSel').textContent = `${c.kunj.length}/${c.sel.length}`;
+  const belum = c.sel.filter(s => !(s.km > 0)).map(s => s.kode);
+  $('gCatatan').textContent = `${satu(c.km2Kunj)} dari ${satu(c.km2)} km² grid 5×5 km. Tiap sel dihitung sekali walau dipatroli berulang.` +
+    (belum.length ? ` Belum dikunjungi (${belum.length}): ${belum.join(', ')}.` : ' Semua sel sudah dikunjungi.');
+  const urut = [...c.kunj].sort((a, b) => b.km - a.km);
+  $('tGrid').innerHTML = urut.length
+    ? '<tr><th>Sel</th><th class="angka-kanan">Km</th><th class="angka-kanan">Patroli</th><th class="angka-kanan">Bulan</th><th class="angka-kanan">Temuan</th></tr>' +
+      urut.map(s => `<tr><td>${esc(s.kode)}</td><td class="angka-kanan">${satu(s.km)}</td><td class="angka-kanan">${s.patroli.size}</td><td class="angka-kanan">${s.bulan.size}</td><td class="angka-kanan">${s.temuan}</td></tr>`).join('')
+    : '<tr><td>Belum ada jalur patroli untuk filter ini.</td></tr>';
+}
 fetch('data/grid-patroli-tlgc.geojson').then(r => r.json()).then(g => {
-  L.geoJSON(g, { pane: 'grid', interactive: false, style: { color: TLGC.lautTua, weight: 1, opacity: .55, dashArray: '4 4', fill: false } }).addTo(lapisGrid);
-  g.features.forEach(f => {
-    const c = L.geoJSON(f).getBounds().getCenter();
-    L.marker(c, { pane: 'grid', interactive: false, icon: L.divIcon({ className: 'label-grid', html: `<span>${esc(f.properties.kode || '')}</span>`, iconSize: [0, 0] }) }).addTo(lapisGrid);
+  gridSel = g.features.map(f => {
+    const xy = poligon(f.geometry).flat(2), xs = xy.map(p => p[0]), ys = xy.map(p => p[1]);
+    return { kode: f.properties.kode, geo: f.geometry, bb: [Math.min(...xs), Math.min(...ys), Math.max(...xs), Math.max(...ys)],
+      pusat: L.geoJSON(f).getBounds().getCenter(),
+      km2: poligon(f.geometry).reduce((a, pl) => a + luasRing(pl[0]) - pl.slice(1).reduce((t, h) => t + luasRing(h), 0), 0) / 1e6 };
   });
+  if (sudahSiap) terapkan(); else gambarGrid(null);
 }).catch(() => {});
 // Label grid hanya saat cukup dekat, supaya tidak menumpuk.
 const aturLabelGrid = () => map.getContainer().classList.toggle('grid-jauh', map.getZoom() < 11);
@@ -441,8 +514,10 @@ function saringJalur(f) {
 }
 
 // Effort & encounter rate (temuan per km). Hanya temuan yang terhubung ke patroli yang dihitung.
+const patroliCocok = (f, x) => x.tahun >= f.dari && x.tahun <= f.sampai && bulanCocok(f, x.mulai) && (!f.kawasan || x.kawasan === f.kawasan) && (!f.tim || x.tim === f.tim);
 function effort(f, data) {
-  const p = patroli.filter(x => x.tahun >= f.dari && x.tahun <= f.sampai && bulanCocok(f, x.mulai) && (!f.kawasan || x.kawasan === f.kawasan) && (!f.tim || x.tim === f.tim));
+  const p = patroli.filter(x => patroliCocok(f, x));
+  tampilCakupan(cakupanGrid(p, data));
   const km = p.reduce((s, x) => s + x.km, 0), jam = p.reduce((s, x) => s + (+x.durasi_aktif_menit || 0), 0) / 60;
   const perId = new Map(p.map(x => [x.id, x]));
   // Temuan unik: observasi ganda di waypoint yang sama dengan kategori & jenis sama dihitung sekali.
@@ -659,7 +734,8 @@ function legenda() {
     <div>${svgIkon('lain', '#3F5A54', true, 22)}Lingkar kuning = pelanggaran</div>`;
   $('legendaZona').innerHTML = Object.entries(WARNA_ZONA).map(([z, w]) =>
     `<div><span class="kotak-zona" style="background:${w}47;border-color:${w}"></span>${z}</div>`).join('')
-    + `<div><span class="kotak-zona grid"></span>Grid patroli 5×5 km</div>`;
+    + `<div><span class="kotak-zona grid"></span>Grid patroli 5×5 km (belum dikunjungi)</div>`
+    + KELAS_GRID.map(([, op, t]) => `<div><span class="kotak-zona" style="background:${WARNA_GRID}${Math.round(op * 255).toString(16).padStart(2, '0')};border-color:${WARNA_GRID}"></span>Dipatroli ${t}</div>`).join('');
   $('legendaHabitat').innerHTML = Object.entries(WARNA_HABITAT).map(([k, w]) =>
     `<div><span class="kotak-zona" style="background:${w}99;border-color:${w}"></span>${k}</div>`).join('');
 }
@@ -686,6 +762,7 @@ function legenda() {
     $('dari').value = tahun[0]; $('sampai').value = tahun[tahun.length - 1]; $('bulan').value = '';
     isiKawasan(); $('kawasan').value = ''; isiTim(); $('kategori').value = ''; isiSub(); $('langgar').checked = false; terapkan(); fokus();
   });
+  sudahSiap = true;
   terapkan();
   fokus();
 })();
@@ -693,7 +770,7 @@ function legenda() {
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
 <script src="impor.js?v=20261122a"></script>
 <script src="kelola.js?v=20261122a"></script>
-<script src="laporan.js?v=20261122a"></script>
+<script src="laporan.js?v=20261122c"></script>
 <script>
 $('btnKelola').addEventListener('click', () => Kelola.buka());
 // Laporan mengikuti filter aktif. Admin yang login boleh memilih versi internal (dengan kolom privat).

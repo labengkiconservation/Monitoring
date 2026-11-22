@@ -39,7 +39,7 @@ const Laporan = (() => {
         .add([r.waypoint_id || `${r.waktu}|${r.lon}|${r.lat}`, r.kategori, r.subkategori, r.spesies_satwa || r.jenis_observasi].join('|'));
     }
     const nUnik = [...unikPer.values()].reduce((s, x) => s + x.size, 0);
-    return { temuan, pat, km, jam, nUnik, unikPer, er: km > 0 ? nUnik / km : null };
+    return { temuan, pat, km, jam, nUnik, unikPer, er: km > 0 ? nUnik / km : null, cak: cakupanGrid(pat, temuan) };
   }
 
   function labelPeriode(f) {
@@ -73,6 +73,14 @@ const Laporan = (() => {
       if (b && b.km > 0) s += ` Jarak patroli ${arah(a.km, b.km)} ${labelPeriode(fb)} (${d1(b.km)} km).`;
       else if (b && fb.sampai >= Math.min(...patroli.map(p => p.tahun))) s += ` Tidak ada data patroli pada ${labelPeriode(fb)} sebagai pembanding.`;
       out.push(s);
+      const c = a.cak;
+      if (c?.kunj.length) {
+        const utama = [...c.kunj].sort((x, y) => y.km - x.km), n4 = utama.slice(0, 4), kmTot = c.kunj.reduce((t, s) => t + s.km, 0);
+        let t = `Patroli menjangkau **${c.kunj.length} dari ${c.sel.length} sel grid** 5×5 km (**${d1(c.persen)}%** luas grid, ${d1(c.km2Kunj)} km²)`;
+        t += n4.length < c.kunj.length ? `, dengan ${pct(n4.reduce((x, s) => x + s.km, 0), kmTot)}% jarak patroli terpusat di sel ${daftar(n4.map(s => s.kode))}.` : '.';
+        if (b?.cak?.kunj.length) t += ` Cakupan ini ${arah(c.persen, b.cak.persen)} ${labelPeriode(fb)} (${d1(b.cak.persen)}%).`;
+        out.push(t);
+      }
     } else out.push(`Tidak ada data upaya (effort) patroli untuk ${per}${f.kawasan ? ` di ${f.kawasan}` : ''}.`);
 
     const N = a.temuan.length;
@@ -138,15 +146,20 @@ const Laporan = (() => {
   const legendaBawah = { legend: { display: true, position: 'bottom', labels: { boxWidth: 14 } } };
 
   // Peta: citra Esri (CORS diizinkan) + zonasi + jalur + titik temuan, proyeksi Web Mercator.
-  async function peta(a, W = 1600, H = 1150) {
-    const pts = [...a.temuan.map(r => [r.lon, r.lat]), ...a.pat.flatMap(titikJalur)];
+  // mode 'temuan': zonasi + jalur + titik; mode 'grid': sel grid diwarnai menurut km patroli (cakupan).
+  async function peta(a, mode = 'temuan', W = 1600, H = 1150) {
+    const pts = mode === 'grid' ? (a.cak ? a.cak.sel.flatMap(s => [[s.bb[0], s.bb[1]], [s.bb[2], s.bb[3]]]) : [])
+      : [...a.temuan.map(r => [r.lon, r.lat]), ...a.pat.flatMap(titikJalur)];
     if (!pts.length) return null;
     const wx = (lon, z) => (lon + 180) / 360 * 256 * 2 ** z;
     const wy = (lat, z) => { const s = Math.sin(lat * Math.PI / 180); return (0.5 - Math.log((1 + s) / (1 - s)) / (4 * Math.PI)) * 256 * 2 ** z; };
     const lon = pts.map(p => p[0]), lat = pts.map(p => p[1]);
     const [x0, x1, y0, y1] = [Math.min(...lon), Math.max(...lon), Math.max(...lat), Math.min(...lat)];
     let z = 17;
-    while (z > 3 && ((wx(x1, z) - wx(x0, z)) > W * 0.85 || (wy(y1, z) - wy(y0, z)) > H * 0.85)) z--;
+    const isi = mode === 'grid' ? 0.96 : 0.85; // grid: isi bingkai semaksimal mungkin
+    while (z > 3 && ((wx(x1, z) - wx(x0, z)) > W * isi || (wy(y1, z) - wy(y0, z)) > H * isi)) z--;
+    // Di atas citra gelap, sel dipatroli memakai tosca terang supaya kelas intensitas terbaca.
+    const WARNA_SEL = '#4CC4BE', opSel = op => Math.round(Math.min(1, op + .2) * 255).toString(16).padStart(2, '0');
     const cx = (wx(x0, z) + wx(x1, z)) / 2, cy = (wy(y0, z) + wy(y1, z)) / 2;
     const ox = Math.round(cx - W / 2), oy = Math.round(cy - H / 2); // bulat: ubin tanpa garis sambungan
     const P = (lo, la) => [wx(lo, z) - ox, wy(la, z) - oy];
@@ -168,8 +181,23 @@ const Laporan = (() => {
     const nUbin = (await Promise.all(tugas)).filter(Boolean).length;
 
     const garis = (cs, tutup) => { cs.forEach(([lo, la], i) => { const [x, y] = P(lo, la); i ? g.lineTo(x, y) : g.moveTo(x, y); }); if (tutup) g.closePath(); };
+    if (mode === 'grid') {
+      g.textAlign = 'center'; g.textBaseline = 'middle';
+      for (const s of a.cak.sel) {
+        const k = s.km > 0 && kelasGrid(s.km);
+        g.beginPath(); poligon(s.geo).forEach(p => p.forEach(r => garis(r, true)));
+        if (k) { g.fillStyle = WARNA_SEL + opSel(k[1]); g.fill('evenodd'); g.setLineDash([]); g.strokeStyle = '#fff'; g.lineWidth = 2; }
+        else { g.setLineDash([8, 6]); g.strokeStyle = 'rgba(255,255,255,.85)'; g.lineWidth = 1.5; }
+        g.stroke(); g.setLineDash([]);
+        const [px, py] = P(s.pusat.lng, s.pusat.lat);
+        g.font = 'bold 22px Nunito, Arial, sans-serif'; g.lineWidth = 4; g.strokeStyle = 'rgba(0,0,0,.55)';
+        g.strokeText(s.kode, px, py - (k ? 11 : 0)); g.fillStyle = '#fff'; g.fillText(s.kode, px, py - (k ? 11 : 0));
+        if (k) { g.font = '16px Nunito, Arial, sans-serif'; const t = `${Math.round(s.km)} km`; g.strokeText(t, px, py + 13); g.fillText(t, px, py + 13); }
+      }
+      g.textAlign = 'left';
+    }
     // Zonasi
-    for (const f of lapisZona.toGeoJSON().features) {
+    if (mode === 'temuan') for (const f of lapisZona.toGeoJSON().features) {
       const w = WARNA_ZONA[f.properties.Zona] || TLGC.abu, geo = f.geometry;
       const polys = geo.type === 'Polygon' ? [geo.coordinates] : geo.type === 'MultiPolygon' ? geo.coordinates : [];
       g.beginPath(); polys.forEach(p => p.forEach(r => garis(r, true)));
@@ -177,12 +205,12 @@ const Laporan = (() => {
     }
     // Jalur
     const segmen = p => !p.jalur ? [] : p.jalur.type === 'MultiLineString' ? p.jalur.coordinates : [p.jalur.coordinates];
-    for (const [warna, lebar] of [['rgba(255,255,255,.75)', 5], ['#1E6FB8', 2.5]]) {
+    if (mode === 'temuan') for (const [warna, lebar] of [['rgba(255,255,255,.75)', 5], ['#1E6FB8', 2.5]]) {
       g.strokeStyle = warna; g.lineWidth = lebar; g.lineJoin = 'round';
       for (const p of a.pat) for (const s of segmen(p)) { g.beginPath(); garis(s); g.stroke(); }
     }
     // Temuan
-    for (const r of a.temuan) {
+    if (mode === 'temuan') for (const r of a.temuan) {
       const [x, y] = P(r.lon, r.lat);
       g.beginPath(); g.arc(x, y, 9, 0, 2 * Math.PI);
       g.fillStyle = WARNA_KAT[r.kategori] || TLGC.abu; g.fill(); g.lineWidth = 2.5; g.strokeStyle = '#fff'; g.stroke();
@@ -190,15 +218,19 @@ const Laporan = (() => {
     }
     // Legenda
     const kats = unik(a.temuan.map(r => r.kategori)), zonas = Object.keys(WARNA_ZONA);
-    const baris = [...kats.map(k => ['titik', WARNA_KAT[k] || TLGC.abu, k]), ['ring', TLGC.kuning, 'Pelanggaran'],
-      ['garis', '#1E6FB8', 'Jalur patroli'], ...zonas.map(k => ['kotak', WARNA_ZONA[k], `Zona ${k}`])];
+    const baris = mode === 'grid'
+      ? [...KELAS_GRID.map(([, op, t]) => ['kotak', WARNA_SEL, `Dipatroli ${t}`, Math.min(1, op + .2)]), ['putus', '#557069', 'Belum dikunjungi']]
+      : [...kats.map(k => ['titik', WARNA_KAT[k] || TLGC.abu, k]), ['ring', TLGC.kuning, 'Pelanggaran'],
+        ['garis', '#1E6FB8', 'Jalur patroli'], ...zonas.map(k => ['kotak', WARNA_ZONA[k], `Zona ${k}`])];
     const lh = 30, bw = 300, bh = baris.length * lh + 20;
     g.fillStyle = 'rgba(255,255,255,.92)'; g.fillRect(16, H - bh - 16, bw, bh);
     g.font = '19px Nunito, Arial, sans-serif'; g.textBaseline = 'middle';
-    baris.forEach(([jenis, w, teks], i) => {
+    baris.forEach(([jenis, w, teks, op], i) => {
       const y = H - bh - 6 + lh * i + lh / 2, x = 34;
       g.beginPath();
       if (jenis === 'titik') { g.arc(x, y, 8, 0, 2 * Math.PI); g.fillStyle = w; g.fill(); }
+      else if (jenis === 'putus') { g.setLineDash([4, 3]); g.lineWidth = 1.5; g.strokeStyle = w; g.strokeRect(x - 10, y - 8, 20, 16); g.setLineDash([]); }
+      else if (op) { g.fillStyle = w + Math.round(op * 255).toString(16).padStart(2, '0'); g.fillRect(x - 10, y - 8, 20, 16); g.lineWidth = 1.5; g.strokeStyle = w; g.strokeRect(x - 10, y - 8, 20, 16); }
       else if (jenis === 'ring') { g.arc(x, y, 8, 0, 2 * Math.PI); g.lineWidth = 3; g.strokeStyle = w; g.stroke(); }
       else if (jenis === 'garis') { g.moveTo(x - 11, y); g.lineTo(x + 11, y); g.lineWidth = 4; g.strokeStyle = w; g.stroke(); }
       else { g.fillStyle = w + '66'; g.fillRect(x - 10, y - 8, 20, 16); g.lineWidth = 2; g.strokeStyle = w; g.strokeRect(x - 10, y - 8, 20, 16); }
@@ -261,6 +293,8 @@ const Laporan = (() => {
         children: [new D.Paragraph({ alignment: D.AlignmentType.CENTER, children: [new D.TextRun({ text: n, bold: true, size: 30, color: WARNA.judul, font: FONT })] }),
           new D.Paragraph({ alignment: D.AlignmentType.CENTER, children: [new D.TextRun({ text: l, size: 16, color: WARNA.samar, font: FONT })] })] })) })]
     });
+    let noGb = 0;
+    const gb = teks => ket(`Gambar ${++noGb}. ${teks}`);
     const jarak = () => new D.Paragraph({ text: '', spacing: { after: 80 } });
 
     const isi = [];
@@ -303,21 +337,34 @@ const Laporan = (() => {
         isi.push(jarak(), gambar(await grafik('line', bln.map(labelBulan), [{ data: bln.map(k => { const e = perBln.get(k); return e.km > 0 ? +(e.unik / e.km).toFixed(3) : null; }),
           borderColor: TLGC.koral, backgroundColor: TLGC.koral, borderWidth: 3, pointRadius: 5, tension: .25 }],
           { scales: { x: { grid: { display: false } }, y: { beginAtZero: true, title: { display: true, text: 'temuan unik / km' } } } })),
-        ket('Gambar 1. Tren encounter rate per bulan (temuan unik ÷ km patroli).'));
+        gb('Tren encounter rate per bulan (temuan unik ÷ km patroli).'));
+      }
+      // Cakupan grid: tiap sel dihitung sekali; km, patroli, dan bulan = intensitas.
+      const c = a.cak;
+      if (c) {
+        const imgGrid = await peta(a, 'grid');
+        const urut = [...c.kunj].sort((x, y) => y.km - x.km), belum = c.sel.filter(s => !(s.km > 0)).map(s => s.kode);
+        isi.push(judul('Cakupan grid patroli', 2),
+          para(`Patroli menjangkau **${c.kunj.length} dari ${c.sel.length} sel** grid 5×5 km, atau **${d1(c.persen)}%** luas grid (${d1(c.km2Kunj)} dari ${d1(c.km2)} km²). ` +
+            'Sel dihitung terjangkau bila dilewati jalur patroli, dan hanya dihitung sekali walau dipatroli berulang.'),
+          gambar(imgGrid, 600), gb(`Cakupan grid patroli menurut km jalur per sel, ${per}.`));
+        if (urut.length) isi.push(tabel(['Sel', 'Km jalur', 'Patroli', 'Bulan dikunjungi', 'Temuan'],
+          urut.map(s => [s.kode, d1(s.km), s.patroli.size, s.bulan.size, s.temuan]), [1, 2, 3, 4]));
+        if (belum.length) isi.push(jarak(), para(`Sel yang belum dikunjungi (${belum.length}): ${belum.join(', ')}.`));
       }
     }
 
     // 3. Peta
     const imgPeta = await peta(a);
     if (imgPeta) isi.push(judul('3. Peta patroli dan temuan'), gambar(imgPeta, 640),
-      ket(`Gambar 2. Jalur patroli (${fmt(a.pat.length)}) dan titik temuan (${fmt(N)}) di atas zonasi TLGC, ${per}.`));
+      gb(`Jalur patroli (${fmt(a.pat.length)}) dan titik temuan (${fmt(N)}) di atas zonasi TLGC, ${per}.`));
 
     // 4. Temuan
     if (N) {
       isi.push(judul('4. Temuan'));
       const kat = hitung(a.temuan, r => r.kategori);
       isi.push(gambar(await grafik('bar', kat.map(k => k[0]), [{ data: kat.map(k => k[1]), backgroundColor: kat.map(k => WARNA_KAT[k[0]] || TLGC.abu), borderRadius: 4 }], hz, 1000, 120 + kat.length * 50)),
-        ket('Gambar 3. Jumlah temuan per kategori.'));
+        gb('Jumlah temuan per kategori.'));
       const akt = a.temuan.filter(r => r.kategori === 'Aktivitas Manusia');
       if (akt.length) {
         const grup = hitung(akt, r => `${r.waktu.slice(0, 7)}|${r.subkategori || '-'}|${r.jenis_observasi || '-'}`)
@@ -326,7 +373,7 @@ const Laporan = (() => {
           grup.map(([k, n]) => { const [bl, s, j] = k.split('|'); return [labelBulan(bl), s, j, n]; }), [3]));
         const alat = hitung(akt.filter(r => r.subkategori === 'Penangkapan Ikan'), r => r.jenis_observasi).slice(0, 12);
         if (alat.length) isi.push(jarak(), gambar(await grafik('bar', alat.map(x => x[0]), [{ data: alat.map(x => x[1]), backgroundColor: TLGC.jingga, borderRadius: 4 }], hz, 1000, 120 + alat.length * 45)),
-          ket('Gambar 4. Alat tangkap yang dijumpai.'));
+          gb('Alat tangkap yang dijumpai.'));
       }
     }
 
@@ -357,7 +404,7 @@ const Laporan = (() => {
       isi.push(gambar(await grafik('bar', gt, keg.map((k, i) => ({ label: k, backgroundColor: [TLGC.laut, TLGC.jingga, TLGC.koral, TLGC.tosca, TLGC.abu][i % 5], borderRadius: 4,
         data: gt.map(x => kapal.filter(r => (r.kapal.gt || '(tidak dicatat)') === x && (r.kapal.kegiatan || '(tidak dicatat)') === k).length) })),
         { plugins: legendaBawah, scales: { x: { stacked: true, grid: { display: false } }, y: { stacked: true, beginAtZero: true } } })),
-        ket('Gambar 5. Kapal menurut ukuran (GT) dan kegiatan.'),
+        gb('Kapal menurut ukuran (GT) dan kegiatan.'),
         tabel(['Tanggal', 'Jenis kapal', 'GT', 'Kegiatan', 'Hasil tangkapan', 'Awak', 'Asal', ...(internal ? ['Nama kapal', 'Nakhoda'] : [])],
           kapal.sort((x, y) => x.waktu.localeCompare(y.waktu)).map(r => [tgl(r.waktu), r.kapal.jenis, r.kapal.gt, r.kapal.kegiatan,
             [r.kapal.hasil_tangkapan, r.kapal.berat_tangkapan].filter(Boolean).join(', '), r.kapal.awak, r.kapal.asal,
@@ -370,13 +417,13 @@ const Laporan = (() => {
     if (satwa.length || hab) {
       isi.push(judul('7. Satwa dan habitat'));
       if (satwa.length) isi.push(gambar(await grafik('bar', satwa.map(s => s[0]), [{ data: satwa.map(s => s[1]), backgroundColor: TLGC.laut, borderRadius: 4 }], hz, 1000, 120 + satwa.length * 45)),
-        ket('Gambar 6. Satwa yang dijumpai.'));
+        gb('Satwa yang dijumpai.'));
       if (hab) {
         const zona = Object.keys(hab.zona).filter(z => z !== 'Di luar zona');
         isi.push(para('Sebagai konteks, luas habitat bentik di tiap zona TLGC menurut Allen Coral Atlas (citra satelit 2020):'),
           gambar(await grafik('bar', zona, Object.keys(WARNA_HABITAT).map(k => ({ label: k, data: zona.map(z => hab.zona[z][k] || 0), backgroundColor: WARNA_HABITAT[k] })),
             { indexAxis: 'y', plugins: legendaBawah, scales: { x: { stacked: true, beginAtZero: true, title: { display: true, text: 'hektar' } }, y: { stacked: true, grid: { display: false } } } }, 1000, 520)),
-          ket('Gambar 7. Habitat bentik per zona (ha). Sumber: Allen Coral Atlas v2.0, CC-BY-4.0.'));
+          gb('Habitat bentik per zona (ha). Sumber: Allen Coral Atlas v2.0, CC-BY-4.0.'));
       }
     }
 
@@ -384,6 +431,7 @@ const Laporan = (() => {
     isi.push(judul('8. Catatan metode'),
       para('Data berasal dari patroli SMART tim TLGC yang diunggah ke Smart Patrol TLGC. Laporan ini mengikuti filter yang dipilih saat laporan dibuat; temuan yang disembunyikan atau ada di Sampah tidak ikut.'),
       para('**Encounter rate** = jumlah temuan unik ÷ km patroli. Temuan unik dihitung sekali per titik (waypoint), kategori, dan jenis dalam satu hari patroli. Hanya temuan yang terhubung ke data patroli yang ikut dihitung. Upaya di bawah 5 km membuat angka ini belum stabil.'),
+      para('**Cakupan grid** = luas sel grid 5×5 km yang dilewati jalur patroli ÷ luas seluruh grid. Jalur dipecah tiap ±25 m dan tiap potongan masuk ke sel tempat titik tengahnya berada. Sel yang dipatroli berulang tetap dihitung sekali; km jalur, jumlah patroli, dan jumlah bulan per sel menunjukkan intensitas.'),
       para(fb ? `Pembanding pada ringkasan adalah ${labelPeriode(fb)}, periode dengan panjang yang sama tepat sebelum periode laporan.` : 'Ringkasan tidak memakai pembanding karena periode mencakup bulan yang sama di beberapa tahun.'),
       para('Zonasi pada tabel adalah catatan tim di lapangan, bukan hasil tumpang susun peta. Habitat bentik dari Allen Coral Atlas (2020) menunjukkan sebaran habitat, bukan tutupan karang hidup.'));
 
@@ -416,5 +464,5 @@ const Laporan = (() => {
     return nama;
   }
 
-  return { buat, narasi, pilih, periodeSebelum, labelPeriode };
+  return { buat, narasi, pilih, periodeSebelum, labelPeriode, peta };
 })();
