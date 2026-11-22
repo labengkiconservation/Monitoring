@@ -207,6 +207,20 @@
   <div class="grafik"><canvas id="gSpesies" height="260"></canvas></div>
   <h3>Temuan per tim</h3>
   <div class="grafik"><canvas id="gTim" height="170"></canvas></div>
+  <h3>Tindak lanjut temuan</h3>
+  <div class="angka">
+    <div class="merah"><b id="tlPerlu">–</b><span>perlu tindak lanjut</span></div>
+    <div class="kuning"><b id="tlProses">–</b><span>masih proses</span></div>
+    <div><b id="tlSelesai">–</b><span>terselesaikan</span></div>
+    <div class="jingga"><b id="tlBelum">–</b><span>belum ada status</span></div>
+  </div>
+  <h3>Alat tangkap yang dijumpai</h3>
+  <div class="grafik"><canvas id="gAlat" height="200"></canvas></div>
+  <h3>Kapal menurut ukuran &amp; kegiatan</h3>
+  <div class="grafik"><canvas id="gKapal" height="170"></canvas></div>
+  <h3>Temuan per zonasi (catatan tim)</h3>
+  <div class="grafik"><canvas id="gZonasi" height="150"></canvas></div>
+  <p class="ket" style="margin:6px 0 0">Tindak lanjut, kapal, dan zonasi berasal dari atribut SMART Desktop; ikut semua filter.</p>
   <h3>Habitat terumbu per zona (ha)</h3>
   <div class="grafik"><canvas id="gHabitat" height="260"></canvas></div>
   <p class="ket" style="margin:6px 0 0" id="habitatLuar"></p>
@@ -219,7 +233,7 @@
 <script src="config.js"></script>
 <script>
 // SUPABASE_URL dan SUPABASE_KEY berasal dari config.js.
-const KOLOM = 'id,patroli_id,waypoint_id,foto,mitra,desa,kelompok,kawasan,tim,waktu,lon,lat,kategori,subkategori,jenis_observasi,spesies_satwa,spesies_tumbuhan,jenis_kelamin,umur,jumlah,satuan,total_orang,pelanggaran,tindakan,kondisi_fitur';
+const KOLOM = 'id,patroli_id,waypoint_id,foto,mitra,desa,kelompok,kawasan,tim,waktu,lon,lat,kategori,subkategori,jenis_observasi,spesies_satwa,spesies_tumbuhan,jenis_kelamin,umur,jumlah,satuan,total_orang,pelanggaran,tindakan,kondisi_fitur,perlu_tindak_lanjut,status_tindak_lanjut,tgl_tindak_lanjut,usia_temuan,lokasi_temuan,zonasi_kawasan,kapal';
 
 // Palet TLGC (sama dengan variabel CSS di atas) + warna alam laut untuk kategori.
 const TLGC = { lautTua: '#0B6B60', laut: '#0F8577', koral: '#D9432E', jingga: '#F28A1E', kuning: '#FFC93C',
@@ -323,7 +337,7 @@ async function muat() {
   }
   semua.forEach(r => { r.tahun = r.waktu ? +r.waktu.slice(0, 4) : null; r.bulan = r.waktu ? r.waktu.slice(0, 7) : null; });
   // Effort + jalur patroli.
-  const res = await fetch(`${SUPABASE_URL}/rest/v1/patroli?select=id,mitra,desa,sumber,kawasan,tim,tujuan,mulai,selesai,durasi_aktif_menit,jarak_m,jarak_jalur_m,jumlah_anggota,jalur`, { headers: { apikey: SUPABASE_KEY } });
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/patroli?select=id,mitra,desa,sumber,kawasan,tim,tujuan,mulai,selesai,durasi_aktif_menit,jarak_m,jarak_jalur_m,jumlah_anggota,jalur,tipe_patroli,stasiun,bersenjata,istirahat_menit`, { headers: { apikey: SUPABASE_KEY } });
   if (res.ok) patroli = (await res.json()).map(p => ({ ...p, tahun: p.mulai ? +p.mulai.slice(0, 4) : null, km: (p.jarak_m ?? p.jarak_jalur_m ?? 0) / 1000 }));
 }
 let patroli = [];
@@ -401,13 +415,18 @@ function saringJalur(f) {
     const nTemuan = semua.filter(r => r.patroli_id === p.id).length;
     const isi = `<div class="pop-judul">Patroli ${esc(p.tim || '')}</div><table>
       <tr><td>Kawasan</td><td>${esc(p.kawasan)}</td></tr>
+      ${p.tipe_patroli ? `<tr><td>Tipe</td><td>${esc(p.tipe_patroli === 'MARINE' ? 'Laut' : p.tipe_patroli === 'GROUND' ? 'Darat' : p.tipe_patroli)}</td></tr>` : ''}
+      ${p.stasiun ? `<tr><td>Stasiun</td><td>${esc(p.stasiun)}</td></tr>` : ''}
+      ${p.bersenjata != null ? `<tr><td>Bersenjata</td><td>${p.bersenjata ? 'Ya' : 'Tidak'}</td></tr>` : ''}
+      ${+p.istirahat_menit > 0 ? `<tr><td>Istirahat</td><td>${jam(+p.istirahat_menit)}</td></tr>` : ''}
       ${p.tujuan ? `<tr><td>Tujuan</td><td>${esc(p.tujuan)}</td></tr>` : ''}
       <tr><td>Waktu</td><td>${esc((p.mulai || '').replace('T', ' ').slice(0, 16))} – ${esc((p.selesai || '').slice(11, 16))}</td></tr>
       <tr><td>Durasi aktif</td><td>${p.durasi_aktif_menit == null ? '–' : jam(+p.durasi_aktif_menit)}</td></tr>
       <tr><td>Jarak</td><td>${p.km.toFixed(2)} km</td></tr>
       <tr><td>Anggota</td><td>${p.jumlah_anggota ?? '–'}</td></tr>
       <tr><td>Temuan</td><td>${nTemuan}${p.km > 0 ? ` (${(nTemuan / p.km).toFixed(2)} per km)` : ''}</td></tr></table>`;
-    const [x0, y0] = p.jalur.coordinates[0], [x1, y1] = p.jalur.coordinates.at(-1);
+    const titikJalur = p.jalur.type === 'MultiLineString' ? p.jalur.coordinates.flat() : p.jalur.coordinates;
+    const [x0, y0] = titikJalur[0], [x1, y1] = titikJalur.at(-1);
     lapisJalur
       .addLayer(L.geoJSON(p.jalur, { pane: 'jalur', style: { color: '#fff', weight: 7, opacity: .8 }, interactive: false })) // tepi putih supaya terbaca di citra
       .addLayer(L.geoJSON(p.jalur, { pane: 'jalur', style: { color: warna, weight: 4, opacity: .95 } }).bindPopup(isi))
@@ -509,6 +528,11 @@ function popup(r) {
     ['Waktu', r.waktu?.replace('T', ' ').slice(0, 16)], ['Mitra', r.mitra], ['Kawasan', r.kawasan], ['Tim', r.tim], ['Kategori', [r.kategori, r.subkategori].filter(Boolean).join(' · ')],
     ['Jenis', r.jenis_observasi], ['Jumlah', r.jumlah != null ? `${r.jumlah} ${r.satuan || ''}` : null], ['Jumlah orang', r.total_orang],
     ['Kelamin', r.jenis_kelamin], ['Umur', r.umur], ['Kondisi', r.kondisi_fitur], ['Tindakan', r.tindakan],
+    ['Zonasi', r.zonasi_kawasan], ['Lokasi', r.lokasi_temuan], ['Usia temuan', r.usia_temuan],
+    ['Tindak lanjut', r.perlu_tindak_lanjut == null ? null : r.perlu_tindak_lanjut
+      ? ['Perlu', r.status_tindak_lanjut, r.tgl_tindak_lanjut].filter(Boolean).join(' · ') : 'Tidak perlu'],
+    ['Kapal', r.kapal && [r.kapal.jenis, r.kapal.gt, r.kapal.bahan, r.kapal.kegiatan, r.kapal.awak != null && `${r.kapal.awak} awak`, r.kapal.asal && `asal ${r.kapal.asal}`].filter(Boolean).join(' · ')],
+    ['Tangkapan', r.kapal && [r.kapal.hasil_tangkapan, r.kapal.berat_tangkapan, r.kapal.alat].filter(Boolean).join(' · ')],
     ['Koordinat', `${r.lat.toFixed(5)}, ${r.lon.toFixed(5)}`]
   ].filter(([, v]) => v != null && v !== '');
   const foto = (r.foto || []).map((p, i) => `<button class="pop-foto" data-foto="${esc(urlFoto(p))}" aria-label="Perbesar foto ${i + 1}">
@@ -580,6 +604,24 @@ function terapkan() {
 
   const tim = teratas(hitung(data, r => r.tim), 10);
   gambar('gTim', 'bar', tim.map(t => t[0]), [{ data: tim.map(t => t[1]), backgroundColor: TLGC.tosca, borderRadius: 3 }], horizontal);
+
+  // Tindak lanjut, alat tangkap, kapal, zonasi (variabel SMART Desktop).
+  const perlu = data.filter(r => r.perlu_tindak_lanjut === true);
+  $('tlPerlu').textContent = fmt(perlu.length);
+  $('tlProses').textContent = fmt(perlu.filter(r => r.status_tindak_lanjut === 'Masih proses').length);
+  $('tlSelesai').textContent = fmt(perlu.filter(r => r.status_tindak_lanjut === 'Terselesaikan').length);
+  $('tlBelum').textContent = fmt(perlu.filter(r => !r.status_tindak_lanjut).length);
+  const alat = teratas(hitung(data.filter(r => r.subkategori === 'Penangkapan Ikan'), r => r.jenis_observasi), 10);
+  gambar('gAlat', 'bar', alat.map(a => a[0]), [{ data: alat.map(a => a[1]), backgroundColor: TLGC.jingga, borderRadius: 3 }], horizontal);
+  const kapal = data.filter(r => r.kapal?.gt);
+  const URUT_GT = ['< 5 GT', '5–10 GT', '10–30 GT'];
+  const gt = unik(kapal.map(r => r.kapal.gt)).sort((x, y) => (URUT_GT.indexOf(x) + 1 || 99) - (URUT_GT.indexOf(y) + 1 || 99)), kegiatan = unik(kapal.map(r => r.kapal.kegiatan || '(tidak dicatat)'));
+  gambar('gKapal', 'bar', gt, kegiatan.map((k, i) => ({
+    label: k, backgroundColor: [TLGC.laut, TLGC.jingga, TLGC.koral, TLGC.tosca, TLGC.abu][i % 5], borderRadius: 3,
+    data: gt.map(g => kapal.filter(r => r.kapal.gt === g && (r.kapal.kegiatan || '(tidak dicatat)') === k).length)
+  })), { plugins: { legend: { display: true, position: 'bottom', labels: { boxWidth: 10 } } }, scales: { x: { stacked: true, grid: { display: false } }, y: { stacked: true, beginAtZero: true, grid: { color: '#dcece5' } } } });
+  const zonasi = teratas(hitung(data, r => r.zonasi_kawasan), 8);
+  gambar('gZonasi', 'bar', zonasi.map(z => z[0]), [{ data: zonasi.map(z => z[1]), backgroundColor: TLGC.mangrove, borderRadius: 3 }], horizontal);
 }
 
 function isiSelect(el, nilai) { nilai.forEach(v => el.add(new Option(v, v))); }
@@ -644,8 +686,8 @@ function legenda() {
 })();
 </script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
-<script src="impor.js?v=20261116c"></script>
-<script src="kelola.js?v=20261116c"></script>
+<script src="impor.js?v=20261122a"></script>
+<script src="kelola.js?v=20261122a"></script>
 <script>$('btnKelola').addEventListener('click', () => Kelola.buka());</script>
 </body>
 </html>

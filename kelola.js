@@ -13,10 +13,13 @@ const Kelola = (() => {
     ['spesies_satwa', 'Spesies satwa', 'text'], ['spesies_tumbuhan', 'Spesies tumbuhan', 'text'], ['jenis_kelamin', 'Jenis kelamin', 'text'],
     ['umur', 'Umur', 'text'], ['jumlah', 'Jumlah', 'number'], ['satuan', 'Satuan', 'text'],
     ['total_orang', 'Jumlah orang', 'number'], ['pelanggaran', 'Pelanggaran', 'bool'], ['kondisi_fitur', 'Kondisi fitur', 'text'],
-    ['tindakan', 'Tindakan', 'text'], ['nama', 'Nama pelaku (privat)', 'text'], ['info_lain', 'Informasi lainnya (privat)', 'textarea']
+    ['tindakan', 'Tindakan', 'text'], ['zonasi_kawasan', 'Zonasi (catatan tim)', 'text'], ['lokasi_temuan', 'Lokasi temuan', 'text'],
+    ['usia_temuan', 'Usia temuan', 'text'], ['perlu_tindak_lanjut', 'Perlu tindak lanjut', 'bool'], ['status_tindak_lanjut', 'Status tindak lanjut', 'text'],
+    ['tgl_tindak_lanjut', 'Tanggal tindak lanjut', 'date'],
+    ['nama', 'Nama pelaku (privat)', 'text'], ['info_lain', 'Informasi lainnya (privat)', 'textarea']
   ];
 
-  let berubah = false, siapUnggah = [], siapEffort = [], namaFileUnggah = '', halaman = 0, dipilih = new Set(), barisTampil = [];
+  let berubah = false, siapUnggah = [], siapEffort = [], konflikTemuan = 'kunci', namaFileUnggah = '', halaman = 0, dipilih = new Set(), barisTampil = [];
   let petaMini, penandaMini, sorot;
 
   const root = document.createElement('div');
@@ -56,6 +59,8 @@ const Kelola = (() => {
             <h3>Unggah data patroli</h3>
             <p class="k-ket"><b>JSON SMART Mobile</b> (disarankan): patroli, jalur GPS, durasi, jarak, dan observasi sekaligus,
               jadi effort dan encounter rate bisa dihitung.<br>
+              <b>GeoJSON gabungan SMART Desktop</b> (mis. <code>patroli_smart_gabungan.geojson</code>): patroli, jalur, dan temuan seri TLGC
+              beserta tindak lanjut dan data kapal; seri lain dilewati.<br>
               <b>Excel SMART Patrol Master</b> (Google Sheet → File → Download → Microsoft Excel): sheet Temuan Patroli + Effort Patrol, semua mitra sekaligus.<br>
               <b>CSV / Excel</b> ekspor SMART (${Impor.WAJIB.map(k => `<code>${k}</code>`).join(', ')}, …): hanya titik temuan, tanpa effort.<br>
               File boleh tumpang tindih dengan data lama: yang sudah ada otomatis dilewati.
@@ -240,7 +245,11 @@ const Kelola = (() => {
   // ---------- input data ----------
   async function pilihFile(file) {
     $k('kPratinjau').hidden = true; $k('kPratinjauJson').hidden = true;
-    if (/\.(geo)?json$/i.test(file.name)) return pilihJson(file);
+    if (/\.(geo)?json$/i.test(file.name)) {
+      // GeoJSON gabungan SMART Desktop (properti patrol_id + layer) memakai pratinjau tabel; selain itu JSON SMART Mobile.
+      const h = Impor.parseGabungan(await file.text());
+      return h ? tampilkanTabel(h, file.name, 'kPesanFile') : pilihJson(file);
+    }
     pesan('kPesanFile', 'info', 'Membaca file…');
     try { tampilkanTabel(await Impor.baca(file), file.name, 'kPesanFile'); }
     catch (err) { pesan('kPesanFile', 'gagal', esc(err.message)); }
@@ -251,9 +260,17 @@ const Kelola = (() => {
       if (!h.total) return pesan(idPesan, 'gagal', 'Sumber kosong: tidak ada baris data.');
       if (h.kurang.length) return pesan(idPesan, 'gagal', `Kolom wajib tidak ditemukan: <b>${h.kurang.map(esc).join(', ')}</b>. Pastikan baris pertama berisi judul kolom ekspor SMART.`);
       pesan(idPesan, '', '');
-      siapUnggah = h.siap; namaFileUnggah = nama; siapEffort = h.effort || [];
+      siapUnggah = h.siap; namaFileUnggah = nama; siapEffort = h.effort || []; konflikTemuan = h.gabungan ? 'smart_id' : 'kunci';
       const nTerhubung = h.siap.filter(r => r.patroli_id).length;
-      $k('kEffortBox').hidden = !h.master;
+      $k('kEffortBox').hidden = !h.master && !h.gabungan;
+      if (h.gabungan) $k('kEffortBox').innerHTML = `<p class="k-ket" style="margin-top:12px"><b>Patroli:</b>
+        ${fmt(siapEffort.length)} patroli, total ${(siapEffort.reduce((s, p) => s + (p.jarak_m || 0), 0) / 1000).toLocaleString('id-ID', { maximumFractionDigits: 1 })} km,
+        kawasan <b>${esc(siapEffort[0]?.kawasan || '')}</b> (bisa diubah per temuan di Kurasi).
+        ${h.catatan.map(esc).join(' ')} Foto SMART tidak ikut: path aslinya tersimpan di atribut temuan.</p>
+        <div class="k-tabel" style="max-height:200px"><table><tr><th>ID</th><th>Tipe</th><th>Tanggal</th><th>Ketua tim</th><th>Anggota</th><th>Km</th><th>Jam aktif</th><th>Bersenjata</th></tr>${
+          siapEffort.slice(0, 10).map(p => `<tr><td>${esc(p.id)}</td><td>${esc(p.tipe_patroli)}</td><td>${esc((p.mulai || '').slice(0, 10))}</td><td>${esc(p.ketua_tim)}</td>
+            <td>${p.jumlah_anggota ?? '–'}</td><td>${p.jarak_m == null ? '–' : (p.jarak_m / 1000).toFixed(2)}</td>
+            <td>${p.durasi_aktif_menit == null ? '–' : (p.durasi_aktif_menit / 60).toFixed(1)}</td><td>${p.bersenjata ? 'Ya' : 'Tidak'}</td></tr>`).join('')}</table></div>`;
       if (h.master) $k('kEffortBox').innerHTML = `<p class="k-ket" style="margin-top:12px"><b>Effort patroli (sheet Effort Patrol):</b>
         ${fmt(siapEffort.length)} hari patroli, total ${(siapEffort.reduce((s, p) => s + p.jarak_m, 0) / 1000).toLocaleString('id-ID', { maximumFractionDigits: 1 })} km.
         ${fmt(nTerhubung)} dari ${fmt(h.siap.length)} temuan cocok dengan hari patroli (mitra + desa + tim + tanggal) dan ikut dihitung encounter rate.
@@ -266,7 +283,8 @@ const Kelola = (() => {
       $k('kSalahBox').hidden = !h.salah.length;
       $k('kTSalah').innerHTML = '<tr><th>Baris</th><th>Masalah</th></tr>' + h.salah.slice(0, 50).map(([n, s]) => `<tr><td>${n}</td><td>${esc(s)}</td></tr>`).join('') +
         (h.salah.length > 50 ? `<tr><td colspan="2">… dan ${h.salah.length - 50} baris lain</td></tr>` : '');
-      const kol = [...(h.master ? ['mitra'] : []), 'waktu', 'kawasan', 'tim', 'kategori', 'subkategori', 'spesies_satwa', 'jumlah', 'satuan', 'pelanggaran', 'lon', 'lat'];
+      const kol = h.gabungan ? ['waktu', 'patroli_id', 'kategori', 'subkategori', 'jenis_observasi', 'spesies_satwa', 'pelanggaran', 'status_tindak_lanjut', 'zonasi_kawasan', 'lon', 'lat']
+        : [...(h.master ? ['mitra'] : []), 'waktu', 'kawasan', 'tim', 'kategori', 'subkategori', 'spesies_satwa', 'jumlah', 'satuan', 'pelanggaran', 'lon', 'lat'];
       $k('kTContoh').innerHTML = `<tr>${kol.map(c => `<th>${c}</th>`).join('')}</tr>` +
         h.siap.slice(0, 10).map(r => `<tr>${kol.map(c => `<td>${esc(r[c])}</td>`).join('')}</tr>`).join('');
       $k('kUnggah').disabled = !h.siap.length; $k('kBatalUnggah').disabled = false;
@@ -310,9 +328,9 @@ const Kelola = (() => {
         if (error) throw error;
       }
       for (let i = 0; i < siapUnggah.length; i += per) {
-        // ON CONFLICT (kunci) DO NOTHING: temuan yang sudah ada (termasuk yang di Sampah) dilewati.
+        // ON CONFLICT DO NOTHING: temuan yang sudah ada (termasuk yang di Sampah) dilewati, hasil kurasi tidak tertimpa.
         const potong = siapUnggah.slice(i, i + per).map(r => ({ ...r, batch_id: batch }));
-        const { data, error } = await sb.from('temuan_patroli').upsert(potong, { onConflict: 'kunci', ignoreDuplicates: true }).select('id');
+        const { data, error } = await sb.from('temuan_patroli').upsert(potong, { onConflict: konflikTemuan, ignoreDuplicates: true }).select('id');
         if (error) throw error;
         baru += data.length;
         $k('kBar').firstElementChild.style.width = `${Math.min(100, ((i + per) / siapUnggah.length) * 100)}%`;

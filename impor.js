@@ -389,6 +389,138 @@ const Impor = (() => {
     return { patroli, temuan: beriUrutan(temuan) };
   }
 
+  // ================= GeoJSON gabungan ekspor SMART Desktop =================
+  // Properti datar: seri, layer ('titik_temuan' | 'jalur'), patrol_id, kategori "aktivitasmanusia.penangkapanikan.",
+  // atribut a_* berupa kunci SMART tanpa spasi. Hanya satu seri yang diambil (default TLGC).
+  const NAMA = {
+    aktivitasmanusia: 'Aktivitas Manusia', satwaliar: 'Satwa Liar', tumbuhan: 'Tumbuhan', fitur: 'Fitur', posisi: 'Posisi',
+    pemanfaatan: 'Pemanfaatan', bencanaalam: 'Bencana Alam', pengelolaan: 'Pengelolaan',
+    penangkapanikan: 'Penangkapan Ikan', penangkapikan: 'Penangkapan Ikan', perburuansatwa: 'Perburuan Satwa', perburuan: 'Perburuan Satwa',
+    pelaku: 'Pelaku', pembalakan: 'Pembalakan', penggunaankawasan: 'Penggunaan Kawasan', pengambilanhhbk: 'Pengambilan HHBK',
+    perjumpaansatwa: 'Perjumpaan Satwa', tandasatwa: 'Tanda Satwa', obyekwisata: 'Obyek Wisata', fituralami: 'Fitur Alami',
+    infrastruktur: 'Infrastruktur', pencemaran: 'Pencemaran', palbatas: 'Pal Batas', kebakaranhutandanlahan: 'Kebakaran Hutan dan Lahan',
+    pertambangandanpengeboran: 'Pertambangan dan Pengeboran', masukkawasantanpaizin: 'Masuk kawasan tanpa izin',
+    baganapung: 'Bagan apung', jaringtangsi: 'Jaring tangsi', jalatebar: 'Jala tebar', jalaapung: 'Jala apung', bubu: 'Bubu',
+    jaringinsangtetap: 'Jaring insang tetap', jaringinsanglingkar: 'Jaring insang lingkar', jaringinsanghanyut: 'Jaring insang hanyut',
+    jaringsondong: 'Jaring sondong', jaringtroll: 'Jaring troll', jaringdasar: 'Jaring dasar', pancingan: 'Pancing', panah: 'Panah',
+    tandapenangkapanikanlainnya: 'Tanda penangkapan ikan lainnya', jeratnilon: 'Jerat nilon', jeratbambu: 'Jerat bambu', jeratsling: 'Jerat sling',
+    kebun: 'Kebun', ladang: 'Ladang', limbahpadat: 'Limbah padat', longsor: 'Longsor', sungai: 'Sungai', mataair: 'Mata air', beton: 'Beton',
+    wisataterumbukarang: 'Wisata terumbu karang', kimabesar: 'Kima besar', ikan: 'Ikan', lumbalumba: 'Lumba-lumba',
+    kerangmollusca: 'Kerang / moluska', mamaliaakuatik: 'Mamalia akuatik', mamalia: 'Mamalia', primata: 'Primata', burung: 'Burung',
+    tindakanterhadapobyek: 'Obyek', tindakanterhadappelaku: 'Pelaku', tindakanterhadapalatkerjadantransportasi: 'Alat kerja & transportasi',
+    didokumentasi: 'didokumentasi', diamankan: 'diamankan', diobservasi: 'diobservasi', dimusnahkan: 'dimusnahkan', dikubur: 'dikubur',
+    dilepaskan: 'dilepaskan', diperiksa: 'diperiksa', peringatanlisan: 'peringatan lisan', tidakditindak: 'tidak ditindak', lainnya: 'Lainnya',
+    barudalam1minggu: '< 1 minggu', cukupbaru1minggu2minggu: '1–2 minggu', cukupbaru12minggu: '1–2 minggu', lama2minggu4minggu: '2–4 minggu',
+    cukuplama24minggu: '2–4 minggu', lama1bulan: '± 1 bulan', sangatlama3bulan: '> 3 bulan', diatas1tahun: '> 1 tahun',
+    mesindalam: 'Mesin dalam', perahumesindalam: 'Perahu mesin dalam', mesintempel: 'Mesin tempel', ketintingboat: 'Ketinting', kapal: 'Kapal',
+    underfive: '< 5 GT', undertenandten: '5–10 GT', tenuntilthirty: '10–30 GT',
+    penangkapdanpengepul: 'Penangkap & pengepul', pengepulikan: 'Pengepul ikan',
+    ikanpelagiskecil: 'Pelagis kecil', ikanpelagisbesar: 'Pelagis besar', ikankarang: 'Ikan karang', ikandemersal: 'Demersal',
+    lessthan1kg: '< 1 kg', betweenonefivekg: '1–5 kg', betweenfivetenkg: '5–10 kg', morethantenkg: '> 10 kg',
+    terselesaikan: 'Terselesaikan', masihproses: 'Masih proses', tindaklanjutlainnya: 'Lainnya',
+    tradisional: 'Tradisional', perlindunganbahari: 'Perlindungan bahari', diluarkawasan: 'Di luar kawasan',
+    wood: 'Kayu', fiber: 'Fiber', aktif: 'Aktif', tidakaktif: 'Tidak aktif', tidaklengkap: 'Tidak lengkap', lengkap: 'Lengkap',
+    laki: 'Laki-laki', perempuan: 'Perempuan', jantan: 'Jantan', betina: 'Betina', tidaktahu: 'Tidak tahu',
+    dewasa: 'Dewasa', anakan: 'Anakan', remaja: 'Remaja', hidup: 'Hidup', mati: 'Mati',
+    dilindungi: 'Dilindungi', tidakdilindungi: 'Tidak dilindungi', ya: 'Ya', tidak: 'Tidak'
+  };
+  // Kunci SMART tanpa nama di NAMA tetap tampil apa adanya (huruf pertama kapital), bisa diperbaiki di Kurasi.
+  const nama1 = s => NAMA[s] ?? s.charAt(0).toUpperCase() + s.slice(1);
+  const ruas = v => (teks(v) || '').split('.').filter(Boolean);
+  const label = v => { const r = ruas(v); return r.length ? nama1(r.at(-1)) : null; };
+  const ya = v => { const s = (teks(v) || '').toLowerCase(); return ['ya', 'true', 'pelanggaran'].includes(s) ? true : ['tidak', 'false', 'bukanpelanggaran'].includes(s) ? false : null; };
+  const angkaAtauNull = v => { const n = angka(v); return Number.isFinite(n) ? n : null; };
+  const bersih = o => { for (const k in o) if (o[k] == null || o[k] === '') delete o[k]; return Object.keys(o).length ? o : null; };
+  const KAWASAN_GABUNGAN = 'TWA Teluk Lasolo';
+
+  const formatGabungan = j => j?.type === 'FeatureCollection' && Array.isArray(j.features) &&
+    j.features.some(f => f.properties?.patrol_id && f.properties?.layer);
+
+  // Teks GeoJSON -> null (bukan format ini) atau { sheet, total, siap, salah, kurang, effort, gabungan }.
+  function parseGabungan(teksFile, seri = 'TLGC') {
+    let j;
+    try { j = JSON.parse(teksFile); } catch { return null; }
+    if (!formatGabungan(j)) return null;
+    const fitur = j.features.filter(f => f.properties?.seri === seri);
+    const lain = j.features.length - fitur.length;
+    const salah = [], siap = [], perPatroli = new Map(), kePerWp = new Map();
+    let nPosisi = 0;
+    const jamISO = (tgl, j0) => tgl && /^\d{4}-\d{2}-\d{2}$/.test(tgl) && /^\d{1,2}:\d{2}(:\d{2})?$/.test(j0 || '')
+      ? `${tgl}T${j0.length === 5 ? j0 + ':00' : j0.padStart(8, '0')}` : null;
+
+    fitur.forEach((f, i) => {
+      const p = f.properties, id = teks(p.patrol_id);
+      if (!perPatroli.has(id)) {
+        const mulai = jamISO(p.tgl_mulai || p.tanggal, p.jam_mulai), selesai = jamISO(p.tgl_selesai || p.tanggal, p.jam_selesai);
+        const istirahat = angkaAtauNull(p.istirahat_menit);
+        const kotor = mulai && selesai ? (Date.parse(selesai) - Date.parse(mulai)) / 60000 : null;
+        perPatroli.set(id, {
+          id, seri, sumber: 'smart_desktop', kawasan: KAWASAN_GABUNGAN, tim: teks(p.tim), mandat: teks(p.mandat),
+          transportasi: teks(p.transportasi), tujuan: teks(p.tujuan), tipe_patroli: teks(p.tipe_patroli), stasiun: teks(p.stasiun),
+          ketua_tim: teks(p.ketua_tim), anggota: teks(p.anggota), bersenjata: ya(p.bersenjata), istirahat_menit: istirahat,
+          komentar: teks(p.komentar), jumlah_anggota: angkaAtauNull(p.jml_anggota), mulai, selesai,
+          durasi_aktif_menit: kotor > 0 ? Math.round((kotor - (istirahat || 0)) * 100) / 100 : null,
+          jarak_m: null, garis: []
+        });
+      }
+      const pt = perPatroli.get(id);
+      if (p.layer === 'jalur') {
+        const g = f.geometry;
+        const garis = g?.type === 'LineString' ? [g.coordinates] : g?.type === 'MultiLineString' ? g.coordinates : [];
+        pt.garis.push(...garis.filter(l => l.length >= 2));
+        const km = angkaAtauNull(p.jarak_km);
+        if (km != null) pt.jarak_m = Math.round(((pt.jarak_m || 0) + km * 1000) * 10) / 10;
+        return;
+      }
+      if (p.layer !== 'titik_temuan') return;
+      const [kat, sub] = ruas(p.kategori);
+      if (kat === 'posisi') { nPosisi++; return; } // mulai/istirahat/selesai: sudah tercatat di data patroli
+      const [lon, lat] = (f.geometry?.coordinates || []).map(Number);
+      if (!dalamBatas(lon, lat)) return salah.push([i + 1, `Koordinat tidak valid: ${lon}, ${lat}`]);
+      const waktu = jamISO(p.tanggal, p.waktu);
+      if (!waktu) return salah.push([i + 1, `Tanggal/waktu tidak terbaca: "${p.tanggal ?? ''} ${p.waktu ?? ''}"`]);
+      const wp = `${id}:${teks(p.wp_id) ?? i}`;
+      const ke = (kePerWp.get(wp) || 0) + 1; kePerWp.set(wp, ke);
+      const tindakan = ruas(p.a_tindakan);
+      const info = [teks(p.a_keterangan), p.a_boatname && `Nama kapal: ${p.a_boatname}`, p.a_captain && `Nakhoda: ${p.a_captain}`,
+        p.a_asal && `Asal pelaku: ${p.a_asal}`, p.a_namaikan && `Nama ikan: ${p.a_namaikan}`, p.a_namaobyekwisata && `Obyek wisata: ${p.a_namaobyekwisata}`]
+        .filter(Boolean).join('; ');
+      siap.push({
+        kawasan: KAWASAN_GABUNGAN, tim: teks(p.tim), waktu, lon, lat, patroli_id: id, waypoint_id: wp, smart_id: `${wp}:${ke}`,
+        kategori: kat ? nama1(kat) : null, subkategori: sub ? nama1(sub) : null,
+        jenis_observasi: label(p.a_tipetemuan) || label(p.a_jenisobyekwisata),
+        spesies_satwa: label(p.a_jenissatwa), spesies_tumbuhan: label(p.a_jenistumbuhan),
+        jenis_kelamin: label(p.a_jeniskelaminsatwa || p.a_jeniskelamin), umur: label(p.a_umursatwa) || teks(p.a_umur)?.replace(/\.0$/, '') || null,
+        jumlah: angkaAtauNull(p.a_jumlah), satuan: teks(p.a_satuan), total_orang: angkaAtauNull(p.a_jumlahpelaku),
+        pelanggaran: ya(p.a_pelanggaran),
+        tindakan: tindakan.length ? tindakan.map(nama1).join(': ') : null,
+        kondisi_fitur: label(p.a_kondisitumbuhan || p.a_kondisi || p.a_kondisisatwa),
+        nama: teks(p.a_namapelaku) || teks(p.a_namapelakuindikatif), // privat
+        info_lain: info || null,                                       // privat
+        perlu_tindak_lanjut: ya(p.a_perlutindaklanjut), status_tindak_lanjut: label(p.a_statustindaklanjut),
+        tgl_tindak_lanjut: /^\d{4}-\d{2}-\d{2}$/.test(p.a_tanggaltindaklanjut || '') ? p.a_tanggaltindaklanjut : null,
+        usia_temuan: label(p.a_usiatemuan), lokasi_temuan: teks(p.a_lokasitemuan), zonasi_kawasan: label(p.a_zonasikawasan),
+        kapal: bersih({
+          jenis: label(p.a_jeniskapal), gt: label(p.a_grosstonage), bahan: label(p.a_bahankapal), kegiatan: p.a_kegiatankapal === 'penangkapikan' ? 'Penangkap ikan' : label(p.a_kegiatankapal),
+          hasil_tangkapan: label(p.a_hasiltangkapan), berat_tangkapan: label(p.a_berattangkapan), awak: angkaAtauNull(p.a_jumlahawakkapal),
+          alat: teks(p.a_muatankapal), asal: teks(p.a_asalkapal), keaktifan: label(p.a_keaktifan), dokumen: label(p.a_dokumenkapal), bpkp: label(p.a_bpkp)
+        }),
+        // Semua properti asli (termasuk path foto SMART) disimpan utuh; kolom ini tidak dibuka ke publik.
+        atribut: Object.fromEntries(Object.entries(p).filter(([, v]) => v != null && v !== ''))
+      });
+    });
+
+    const effort = [...perPatroli.values()].map(({ garis, ...pt }) => ({
+      ...pt,
+      jalur: garis.length ? `SRID=4326;MULTILINESTRING(${garis.map(l => `(${l.map(([x, y]) => `${x} ${y}`).join(',')})`).join(',')})` : null
+    }));
+    const lama = effort.filter(p => p.durasi_aktif_menit > 24 * 60).map(p => p.id);
+    const catatan = [lama.length && `Durasi aktif lebih dari 24 jam (cek jam selesai di SMART): ${lama.join(', ')}.`, lain && `${fmt0(lain)} fitur seri lain (bukan ${seri}) dilewati.`, nPosisi && `${nPosisi} titik posisi (mulai/istirahat/selesai) tidak dijadikan temuan.`].filter(Boolean);
+    if (!fitur.length) salah.push([0, `Tidak ada data seri ${seri} di file ini.`]);
+    return { sheet: `SMART Desktop · seri ${seri}`, total: siap.length + salah.length, siap: beriUrutan(siap), salah, kurang: [], effort, gabungan: true, catatan };
+  }
+  const fmt0 = n => n.toLocaleString('id-ID');
+
   // Foto base64 dari SMART -> Blob JPEG yang lebih kecil (sisi terpanjang maks 1600 px).
   async function kompresFoto(base64, maks = 1600, kualitas = 0.8) {
     const mime = base64.startsWith('iVBOR') ? 'image/png' : 'image/jpeg';
@@ -413,5 +545,5 @@ const Impor = (() => {
     return 'uji impor selesai (lihat console untuk assertion gagal)';
   }
 
-  return { baca, olahBaris, olahMaster, rapikanNama, jamLonggar, ambilAppsScript, uji, WAJIB, parseSmartJson, susunJson, labelTemuan, labelPatroli, KOLOM_ATRIBUT, dalamBatas, kompresFoto };
+  return { baca, olahBaris, olahMaster, rapikanNama, jamLonggar, ambilAppsScript, uji, WAJIB, parseSmartJson, parseGabungan, susunJson, labelTemuan, labelPatroli, KOLOM_ATRIBUT, dalamBatas, kompresFoto };
 })();
