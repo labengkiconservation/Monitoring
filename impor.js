@@ -266,7 +266,7 @@ const Impor = (() => {
     // Titik jalur dengan akurasi GPS buruk dibuang supaya jarak tidak membengkak oleh lompatan sinyal.
     const semuaTrack = j.features.filter(f => !f.properties?.sighting && titik(f) && f.properties?.dateTime);
     const track = semuaTrack.filter(f => !(+f.properties.accuracy > AKURASI_MAKS_M))
-      .map(f => ({ t: f.properties.dateTime, xy: titik(f) }));
+      .map(f => ({ t: f.properties.dateTime, xy: titik(f), dev: f.properties.deviceId }));
     const nBuruk = semuaTrack.length - track.length;
 
     const kode = new Map(); // kode -> { jenis, contoh: Set }
@@ -306,7 +306,9 @@ const Impor = (() => {
 
       // Jalur: titik GPS dalam rentang waktu patroli + titik event, diurutkan waktu.
       const a = ms(mulai), b = ms(selesai);
-      const jalur = [...track.filter(p => ms(p.t) >= a && ms(p.t) <= b), ...fs.map(f => ({ t: f.properties.dateTime, xy: titik(f) }))]
+      // File gabungan bisa berisi beberapa HP yang patroli bersamaan: ambil titik GPS dari HP patroli ini saja.
+      const dev = fs[0].properties.deviceId;
+      const jalur = [...track.filter(p => ms(p.t) >= a && ms(p.t) <= b && (!dev || !p.dev || p.dev === dev)),...fs.map(f => ({ t: f.properties.dateTime, xy: titik(f) }))]
         .sort((p, q) => ms(p.t) - ms(q.t))
         .map(p => p.xy).filter((xy, i, arr) => i === 0 || xy[0] !== arr[i - 1][0] || xy[1] !== arr[i - 1][1]);
       let jarakJalur = 0;
