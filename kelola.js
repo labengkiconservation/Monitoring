@@ -550,8 +550,8 @@ const Kelola = (() => {
       const entri = {}; bacaInputKode($k('kTKamus'), entri); await simpanKamus(entri); await muatKamus();
       pesan('kPesanKamus', 'info', 'Menerapkan kamus…');
       const { data: t, error: e1 } = await sb.from('temuan_patroli').select('id,atribut,tim,kategori,subkategori,jumlah,' + Impor.KOLOM_ATRIBUT.filter(k => k !== 'abaikan' && k !== 'jumlah').join(','))
-        .not('atribut', 'is', null).limit(10000);
-      const { data: p, error: e2 } = await sb.from('patroli').select('id,kode_tim,kode_mandat,kode_transportasi,tim,mandat,transportasi');
+        .not('atribut->kat', 'is', null).limit(10000); // hanya baris JSON SMART Mobile (atribut berisi kode); data GeoJSON/Excel tidak disentuh
+      const { data: p, error: e2 } = await sb.from('patroli').select('id,kode_tim,kode_mandat,kode_transportasi,tim,mandat,transportasi').eq('sumber', 'json');
       if (e1 || e2) throw e1 || e2;
       const tugas = [];
       for (const r of t) {
