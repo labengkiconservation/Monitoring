@@ -29,7 +29,7 @@ const Laporan = (() => {
       (!f.sub || r.subkategori === f.sub) && (!f.langgar || r.pelanggaran === true));
     const pat = patroli.filter(x => x.tahun >= f.dari && x.tahun <= f.sampai && bulanCocok(f, x.mulai) &&
       (!f.kawasan || x.kawasan === f.kawasan) && (!f.tim || x.tim === f.tim));
-    const km = pat.reduce((s, x) => s + x.km, 0), jam = pat.reduce((s, x) => s + (+x.durasi_aktif_menit || 0), 0) / 60;
+    const km = pat.reduce((s, x) => s + x.km, 0);
     // Temuan unik per hari patroli (sama dengan encounter rate di panel).
     const perId = new Map(pat.map(x => [x.id, x])), unikPer = new Map();
     for (const r of temuan) {
@@ -39,7 +39,7 @@ const Laporan = (() => {
         .add([r.waypoint_id || `${r.waktu}|${r.lon}|${r.lat}`, r.kategori, r.subkategori, r.spesies_satwa || r.jenis_observasi].join('|'));
     }
     const nUnik = [...unikPer.values()].reduce((s, x) => s + x.size, 0);
-    return { temuan, pat, km, jam, nUnik, unikPer, er: km > 0 ? nUnik / km : null, cak: cakupanGrid(pat, temuan) };
+    return { temuan, pat, km, nUnik, unikPer, er: km > 0 ? nUnik / km : null, cak: cakupanGrid(pat, temuan) };
   }
 
   function labelPeriode(f) {
@@ -69,7 +69,7 @@ const Laporan = (() => {
       const laut = a.pat.filter(p => p.tipe_patroli === 'MARINE').length, darat = a.pat.filter(p => p.tipe_patroli === 'GROUND').length;
       const tipe = laut && !darat && laut === a.pat.length ? ' laut' : darat && !laut && darat === a.pat.length ? ' darat'
         : laut || darat ? ` (${[laut && `${laut} laut`, darat && `${darat} darat`].filter(Boolean).join(', ')})` : '';
-      let s = `Selama ${per}, ${timTeks} melakukan **${fmt(a.pat.length)} patroli${tipe.startsWith(' (') ? '' : tipe}**${tipe.startsWith(' (') ? tipe : ''} sepanjang **${d1(a.km)} km** dengan **${d1(a.jam)} jam** patroli aktif.`;
+      let s = `Selama ${per}, ${timTeks} melakukan **${fmt(a.pat.length)} patroli${tipe.startsWith(' (') ? '' : tipe}**${tipe.startsWith(' (') ? tipe : ''} sepanjang **${d1(a.km)} km**.`;
       if (b && b.km > 0) s += ` Jarak patroli ${arah(a.km, b.km)} ${labelPeriode(fb)} (${d1(b.km)} km).`;
       else if (b && fb.sampai >= Math.min(...patroli.map(p => p.tahun))) s += ` Tidak ada data patroli pada ${labelPeriode(fb)} sebagai pembanding.`;
       out.push(s);
@@ -317,22 +317,22 @@ const Laporan = (() => {
     isi.push(judul('1. Ringkasan'));
     narasi(f, a, b, fb).forEach(s => isi.push(para(s)));
     isi.push(jarak(), kotakAngka([[fmt(N), 'temuan'], [fmt(nL), 'pelanggaran'], [fmt(a.pat.length), 'patroli'],
-      [d1(a.km), 'km patroli'], [d1(a.jam), 'jam aktif'], [a.er == null ? '–' : d2(a.er), 'temuan unik / km']]));
+      [d1(a.km), 'km patroli'], [a.er == null ? '–' : d2(a.er), 'temuan unik / km']]));
 
     // 2. Upaya patroli
     if (a.pat.length) {
       isi.push(judul('2. Upaya patroli'));
       const perBln = new Map();
       for (const p of a.pat) {
-        const k = p.mulai.slice(0, 7), e = perBln.get(k) ?? perBln.set(k, { n: 0, laut: 0, darat: 0, km: 0, jam: 0, unik: 0 }).get(k);
-        e.n++; e.km += p.km; e.jam += (+p.durasi_aktif_menit || 0) / 60;
+        const k = p.mulai.slice(0, 7), e = perBln.get(k) ?? perBln.set(k, { n: 0, laut: 0, darat: 0, km: 0, unik: 0 }).get(k);
+        e.n++; e.km += p.km;
         if (p.tipe_patroli === 'MARINE') e.laut++; else if (p.tipe_patroli === 'GROUND') e.darat++;
       }
       for (const [t, s] of a.unikPer) { const e = perBln.get(t.slice(0, 7)); if (e) e.unik += s.size; }
       const bln = [...perBln.keys()].sort();
-      isi.push(tabel(['Bulan', 'Patroli', 'Laut', 'Darat', 'Km', 'Jam aktif', 'Temuan unik', 'Per km'],
-        bln.map(k => { const e = perBln.get(k); return [labelBulan(k), e.n, e.laut, e.darat, d1(e.km), d1(e.jam), e.unik, e.km > 0 ? d2(e.unik / e.km) : '–']; }),
-        [1, 2, 3, 4, 5, 6, 7]));
+      isi.push(tabel(['Bulan', 'Patroli', 'Laut', 'Darat', 'Km', 'Temuan unik', 'Per km'],
+        bln.map(k => { const e = perBln.get(k); return [labelBulan(k), e.n, e.laut, e.darat, d1(e.km), e.unik, e.km > 0 ? d2(e.unik / e.km) : '–']; }),
+        [1, 2, 3, 4, 5, 6]));
       if (bln.length >= 2) {
         isi.push(jarak(), gambar(await grafik('line', bln.map(labelBulan), [{ data: bln.map(k => { const e = perBln.get(k); return e.km > 0 ? +(e.unik / e.km).toFixed(3) : null; }),
           borderColor: TLGC.koral, backgroundColor: TLGC.koral, borderWidth: 3, pointRadius: 5, tension: .25 }],

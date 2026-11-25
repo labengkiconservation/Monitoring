@@ -193,7 +193,6 @@
   <h3>Effort patroli</h3>
   <div class="angka">
     <div><b id="eKm">–</b><span>km dipatroli</span></div>
-    <div><b id="eJam">–</b><span>jam patroli aktif</span></div>
     <div class="kuning"><b id="ePatroli">–</b><span>patroli</span></div>
     <div class="merah"><b id="eRate">–</b><span id="eRateKet">temuan per km</span></div>
   </div>
@@ -498,7 +497,6 @@ kontrolLapis.addOverlay(lapisJalur, 'Jalur patroli');
 function saringJalur(f) {
   lapisJalur.clearLayers();
   const tims = unik(patroli.map(p => p.tim));
-  const jam = m => `${Math.floor(m / 60)} j ${Math.round(m % 60)} m`;
   for (const p of patroli) {
     if (!p.jalur?.coordinates?.length) continue;
     if (!(p.tahun >= f.dari && p.tahun <= f.sampai) || !bulanCocok(f, p.mulai) || (f.kawasan && p.kawasan !== f.kawasan) || (f.tim && p.tim !== f.tim)) continue;
@@ -509,10 +507,8 @@ function saringJalur(f) {
       ${p.tipe_patroli ? `<tr><td>Tipe</td><td>${esc(p.tipe_patroli === 'MARINE' ? 'Laut' : p.tipe_patroli === 'GROUND' ? 'Darat' : p.tipe_patroli)}</td></tr>` : ''}
       ${p.stasiun ? `<tr><td>Stasiun</td><td>${esc(p.stasiun)}</td></tr>` : ''}
       ${p.bersenjata != null ? `<tr><td>Bersenjata</td><td>${p.bersenjata ? 'Ya' : 'Tidak'}</td></tr>` : ''}
-      ${+p.istirahat_menit > 0 ? `<tr><td>Istirahat</td><td>${jam(+p.istirahat_menit)}</td></tr>` : ''}
       ${p.tujuan ? `<tr><td>Tujuan</td><td>${esc(p.tujuan)}</td></tr>` : ''}
       <tr><td>Waktu</td><td>${esc((p.mulai || '').replace('T', ' ').slice(0, 16))} – ${esc((p.selesai || '').slice(11, 16))}</td></tr>
-      <tr><td>Durasi aktif</td><td>${p.durasi_aktif_menit == null ? '–' : jam(+p.durasi_aktif_menit)}</td></tr>
       <tr><td>Jarak</td><td>${p.km.toFixed(2)} km</td></tr>
       <tr><td>Anggota</td><td>${p.jumlah_anggota ?? '–'}</td></tr>
       <tr><td>Temuan</td><td>${nTemuan}${p.km > 0 ? ` (${(nTemuan / p.km).toFixed(2)} per km)` : ''}</td></tr></table>`;
@@ -531,7 +527,7 @@ const patroliCocok = (f, x) => x.tahun >= f.dari && x.tahun <= f.sampai && bulan
 function effort(f, data) {
   const p = patroli.filter(x => patroliCocok(f, x));
   tampilCakupan(cakupanGrid(p, data));
-  const km = p.reduce((s, x) => s + x.km, 0), jam = p.reduce((s, x) => s + (+x.durasi_aktif_menit || 0), 0) / 60;
+  const km = p.reduce((s, x) => s + x.km, 0);
   const perId = new Map(p.map(x => [x.id, x]));
   // Temuan unik: observasi ganda di waypoint yang sama dengan kategori & jenis sama dihitung sekali.
   // Waypoint = SMART_SightingGroupId bila ada; data lama memakai waktu + lokasi.
@@ -566,7 +562,6 @@ function effort(f, data) {
   $('erKosong').hidden = hari.length > 0;
   const desimal = v => v.toLocaleString('id-ID', { maximumFractionDigits: v < 10 ? 2 : 1 });
   $('eKm').textContent = p.length ? desimal(km) : '–';
-  $('eJam').textContent = p.length ? desimal(jam) : '–';
   $('ePatroli').textContent = fmt(p.length);
   $('eRate').textContent = km > 0 ? desimal(n / km) : '–';
   $('eRateKet').textContent = km > 0 && n ? `temuan unik per km (1 tiap ${desimal(km / n)} km)` : 'temuan unik per km';
@@ -783,7 +778,7 @@ function legenda() {
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
 <script src="impor.js?v=20261126a"></script>
 <script src="kelola.js?v=20261125c"></script>
-<script src="laporan.js?v=20261122c"></script>
+<script src="laporan.js?v=20261126a"></script>
 <script>
 $('btnKelola').addEventListener('click', () => Kelola.buka());
 // Laporan mengikuti filter aktif. Admin yang login boleh memilih versi internal (dengan kolom privat).
