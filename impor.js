@@ -401,6 +401,9 @@ const Impor = (() => {
     return { tim: label(p.kode_tim), mandat: label(p.kode_mandat), transportasi: label(p.kode_transportasi) };
   }
 
+  // Kategori "Posisi" di data model TLGC (Data Model ver 1.2 dan TLGC NEW V3); tetap dikenali walau kamus kosong.
+  const KODE_POSISI = new Set(['c:8b05a77f2d37462ea12c8cde7ad65b6f', 'c:bf61c7792d3041f385baf4b4caad0a43']);
+
   // Hasil parse + kamus { kode: {label, kolom} } -> baris siap simpan.
   function susunJson(h, kamus, kawasan) {
     const patroli = h.patroli.map(p => {
@@ -408,7 +411,9 @@ const Impor = (() => {
       return { id: p.id, kawasan, tujuan: p.tujuan, ...kode, ...labelPatroli(kode, kamus), jumlah_anggota: p.jumlah_anggota, mulai: p.mulai, selesai: p.selesai,
         durasi_aktif_menit: p.durasi_aktif_menit, jarak_m: p.jarak_m, jarak_jalur_m: p.jarak_jalur_m, jalur: p.jalur };
     });
-    const temuan = h.observasi.map(o => ({
+    // Observasi "Posisi" (mulai/istirahat/lanjut/selesai) bukan temuan: sudah tercatat di data patroli, sama seperti impor GeoJSON.
+    const posisi = o => KODE_POSISI.has(o.mentah.kat) || (kamus[o.mentah.kat]?.label || '').trim().toLowerCase() === 'posisi';
+    const temuan = h.observasi.filter(o => !posisi(o)).map(o => ({
       kawasan, waktu: o.waktu, lon: o.lon, lat: o.lat, patroli_id: o.patroli_id, smart_id: o.smart_id, waypoint_id: o.waypoint_id, pelanggaran: null,
       atribut: o.mentah, ...labelTemuan(o.mentah, kamus)
     }));
