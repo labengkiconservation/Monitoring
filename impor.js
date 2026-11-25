@@ -347,7 +347,31 @@ const Impor = (() => {
       }
     }
     if (nBuruk) masalah.push(`${nBuruk} titik jalur dibuang karena akurasi GPS lebih buruk dari ${AKURASI_MAKS_M} m.`);
+    masalah.push(...patroliJanggal(patroli, new Map([...perPatroli].map(([id, fs]) => [id, fs[0].properties.deviceId]))));
     return { patroli, observasi, kode, masalah, nTrack: track.length };
+  }
+
+  // Peringatan (data tetap diimpor): patroli yang angka effort-nya kemungkinan salah rekam di HP.
+  function patroliJanggal(patroli, hp) {
+    const nama = p => `Patroli ${p.mulai.slice(8, 10)}/${p.mulai.slice(5, 7)} ${p.mulai.slice(11, 16)}`;
+    const jam = p => p.durasi_aktif_menit / 60, km = p => (p.jarak_jalur_m / 1000).toFixed(1).replace(".", ",");
+    const r = [];
+    for (const p of patroli) {
+      if (jam(p) > 24) r.push(`${nama(p)}: aktif ${jam(p).toFixed(0)} jam untuk ${km(p)} km. Kemungkinan lupa dihentikan di HP; jam aktif akan membengkak.`);
+      else if (jam(p) >= 6 && p.jarak_jalur_m / 1000 / jam(p) < 0.5) r.push(`${nama(p)}: ${jam(p).toFixed(0)} jam tetapi hanya ${km(p)} km. Kemungkinan HP dibiarkan menyala tanpa patroli.`);
+      if (p.durasi_aktif_menit < 5) r.push(`${nama(p)}: hanya ${p.durasi_aktif_menit.toFixed(0)} menit. Kemungkinan uji coba.`);
+    }
+    // Mulai dan selesai berselisih <= 15 menit dari HP berbeda: kemungkinan satu perjalanan direkam di beberapa HP.
+    const dekat = (a, b) => Math.abs(ms(a) - ms(b)) <= 15 * 60000;
+    const urut = [...patroli].sort((a, b) => ms(a.mulai) - ms(b.mulai)), sudah = new Set();
+    for (let i = 0; i < urut.length; i++) {
+      if (sudah.has(urut[i].id)) continue;
+      const grup = urut.filter((q, j) => j > i && hp.get(q.id) !== hp.get(urut[i].id) && dekat(q.mulai, urut[i].mulai) && dekat(q.selesai, urut[i].selesai));
+      if (!grup.length) continue;
+      grup.forEach(q => sudah.add(q.id));
+      r.push(`${nama(urut[i])}: ${grup.length + 1} patroli dari HP berbeda dengan jam mulai dan selesai hampir sama (${[urut[i], ...grup].map(q => km(q) + ' km').join(', ')}). Kemungkinan satu perjalanan direkam di beberapa HP; km akan terhitung lebih dari sekali.`);
+    }
+    return r;
   }
 
   // Kolom tujuan untuk atribut SMART. Default 'info_lain' (privat) supaya data tak sengaja terbuka ke publik.
