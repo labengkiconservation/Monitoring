@@ -632,8 +632,14 @@ const Kelola = (() => {
   }
 
   async function ubahBanyak(ids, nilai, keterangan) {
-    const { error } = await sb.from('temuan_patroli').update(nilai).in('id', ids);
+    const { data: ubah, error } = await sb.from('temuan_patroli').update(nilai).in('id', ids).select('patroli_id');
     if (error) return pesan('kPesanKurasi', 'gagal', esc(error.message));
+    // Memulihkan temuan ikut memulihkan patrolinya (dibuang bersama lewat "Batalkan"), supaya effort dan jalur tampil lagi.
+    const idPatroli = [...new Set((ubah || []).map(r => r.patroli_id).filter(Boolean))];
+    if (nilai.dihapus_pada === null && idPatroli.length) {
+      const { error: eP } = await sb.from('patroli').update({ dihapus_pada: null }).in('id', idPatroli).not('dihapus_pada', 'is', null);
+      if (eP) return pesan('kPesanKurasi', 'gagal', 'Temuan dipulihkan, tetapi patroli gagal: ' + esc(eP.message));
+    }
     berubah = true; dipilih.clear();
     await muatKurasi();
     pesan('kPesanKurasi', 'ok', `${fmt(ids.length)} temuan ${keterangan}.`);
