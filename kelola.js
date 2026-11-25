@@ -324,7 +324,8 @@ const Kelola = (() => {
       batch = u.id;
       // Effort dulu (temuan merujuk ke patroli). Diperbarui bila sheet diubah: hari patroli yang sama ditimpa.
       for (let i = 0; i < siapEffort.length; i += per) {
-        const { error } = await sb.from('patroli').upsert(siapEffort.slice(i, i + per).map(p => ({ ...p, batch_id: batch })), { onConflict: 'id' });
+        // dihapus_pada: null -> patroli yang pernah dibatalkan (di Sampah) muncul lagi saat file diunggah ulang.
+        const { error } = await sb.from('patroli').upsert(siapEffort.slice(i, i + per).map(p => ({ ...p, batch_id: batch, dihapus_pada: null })), { onConflict: 'id' });
         if (error) throw error;
       }
       for (let i = 0; i < siapUnggah.length; i += per) {
@@ -463,6 +464,9 @@ const Kelola = (() => {
       const { data: p, error: eP } = await sb.from('patroli').upsert(s.patroli.map(r => ({ ...r, batch_id: batch })), { onConflict: 'id', ignoreDuplicates: true }).select('id');
       if (eP) throw eP;
       nPatroli = p.length;
+      // Patroli yang sudah ada tapi pernah dibatalkan (di Sampah) dimunculkan lagi; isinya tidak ditimpa.
+      const { error: eS } = await sb.from('patroli').update({ dihapus_pada: null }).in('id', s.patroli.map(r => r.id)).not('dihapus_pada', 'is', null);
+      if (eS) throw eS;
       for (let i = 0; i < s.temuan.length; i += 500) {
         const { data, error } = await sb.from('temuan_patroli')
           .upsert(s.temuan.slice(i, i + 500).map(r => ({ ...r, batch_id: batch })), { onConflict: 'smart_id', ignoreDuplicates: true }).select('id');
