@@ -764,7 +764,8 @@ const Kelola = (() => {
     $k('kTUnggahan').innerHTML = '<tr><th>Waktu</th><th>File</th><th>Oleh</th><th>Baris</th><th>Baru masuk</th><th>Masih aktif</th><th></th></tr>' +
       (ung.length ? ung.map((u, i) => `<tr><td>${tglTampil(u.dibuat_pada)}</td><td>${esc(u.nama_file)}</td><td>${esc(u.dibuat_oleh)}</td>
         <td>${fmt(u.jumlah_baris)}</td><td>${u.jumlah_baru == null ? '–' : fmt(u.jumlah_baru)}</td><td>${fmt(aktif[i])}</td>
-        <td>${aktif[i] ? `<button class="k-btn bahaya kecil" data-batal="${u.id}" data-n="${aktif[i]}">Batalkan unggahan</button>` : ''}</td></tr>`).join('')
+        <td>${aktif[i] ? `<button class="k-btn bahaya kecil" data-batal="${u.id}" data-n="${aktif[i]}">Batalkan unggahan</button>` : ''}
+          ${u.jumlah_baru && aktif[i] < u.jumlah_baru ? `<button class="k-btn kecil" data-pulihkan="${u.id}">Pulihkan unggahan</button>` : ''}</td></tr>`).join('')
       : '<tr><td colspan="7">Belum ada unggahan lewat panel ini.</td></tr>');
     $k('kTLog').innerHTML = '<tr><th>Waktu</th><th>Oleh</th><th>ID</th><th>Aksi</th><th>Perubahan</th></tr>' +
       (log.length ? log.map(l => `<tr><td>${tglTampil(l.pada)}</td><td>${esc(l.oleh || 'sistem')}</td><td>${l.temuan_id}</td><td>${esc(l.aksi)}</td>
@@ -774,6 +775,17 @@ const Kelola = (() => {
       : '<tr><td colspan="5">Belum ada perubahan.</td></tr>');
   }
   $k('kTUnggahan').addEventListener('click', async e => {
+    const p = e.target.closest('[data-pulihkan]');
+    if (p) {
+      // Kebalikan "Batalkan": temuan dan patroli unggahan ini keluar dari Sampah. Mengunggah ulang tidak memulihkan.
+      if (!confirm('Pulihkan semua temuan dan patroli dari unggahan ini dari Sampah?')) return;
+      p.disabled = true;
+      const { data: t, error } = await sb.from('temuan_patroli').update({ dihapus_pada: null }).eq('batch_id', +p.dataset.pulihkan).not('dihapus_pada', 'is', null).select('id');
+      const { data: pt, error: eP } = error ? {} : await sb.from('patroli').update({ dihapus_pada: null }).eq('batch_id', +p.dataset.pulihkan).not('dihapus_pada', 'is', null).select('id');
+      if (error || eP) { p.disabled = false; return pesan('kPesanRiwayat', 'gagal', esc((error || eP).message)); }
+      berubah = true; await muatRiwayat();
+      return pesan('kPesanRiwayat', 'ok', `${fmt(t.length)} temuan dan ${fmt(pt.length)} patroli dipulihkan.`);
+    }
     const b = e.target.closest('[data-batal]'); if (!b) return;
     if (!confirm(`Pindahkan ${b.dataset.n} temuan dari unggahan ini ke Sampah? Bisa dipulihkan dari tab Kurasi > Sampah.`)) return;
     b.disabled = true;
