@@ -161,7 +161,10 @@
     <div><label for="dari">Dari tahun</label><select id="dari"></select></div>
     <div><label for="sampai">Sampai tahun</label><select id="sampai"></select></div>
   </div>
-  <label for="bulan">Bulan</label><select id="bulan"><option value="">Semua bulan</option></select>
+  <div class="baris">
+    <div><label for="bulanDari">Dari bulan</label><select id="bulanDari"></select></div>
+    <div><label for="bulanSampai">Sampai bulan</label><select id="bulanSampai"></select></div>
+  </div>
   <label for="kawasan">Kawasan / desa</label><select id="kawasan"><option value="">Semua kawasan</option></select>
   <label for="tim">Tim patroli</label><select id="tim"><option value="">Semua tim</option></select>
   <label for="kategori">Kategori</label><select id="kategori"><option value="">Semua kategori</option></select>
@@ -499,7 +502,7 @@ function saringJalur(f) {
   const tims = unik(patroli.map(p => p.tim));
   for (const p of patroli) {
     if (!p.jalur?.coordinates?.length) continue;
-    if (!(p.tahun >= f.dari && p.tahun <= f.sampai) || !bulanCocok(f, p.mulai) || (f.kawasan && p.kawasan !== f.kawasan) || (f.tim && p.tim !== f.tim)) continue;
+    if (!periodeCocok(f, p.mulai) || (f.kawasan && p.kawasan !== f.kawasan) || (f.tim && p.tim !== f.tim)) continue;
     const warna = WARNA_JALUR[tims.indexOf(p.tim) % WARNA_JALUR.length];
     const nTemuan = semua.filter(r => r.patroli_id === p.id).length;
     const isi = `<div class="pop-judul">Patroli ${esc(p.tim || '')}</div><table>
@@ -523,7 +526,7 @@ function saringJalur(f) {
 }
 
 // Effort & encounter rate (temuan per km). Hanya temuan yang terhubung ke patroli yang dihitung.
-const patroliCocok = (f, x) => x.tahun >= f.dari && x.tahun <= f.sampai && bulanCocok(f, x.mulai) && (!f.kawasan || x.kawasan === f.kawasan) && (!f.tim || x.tim === f.tim);
+const patroliCocok = (f, x) => periodeCocok(f, x.mulai) && (!f.kawasan || x.kawasan === f.kawasan) && (!f.tim || x.tim === f.tim);
 function effort(f, data) {
   const p = patroli.filter(x => patroliCocok(f, x));
   tampilCakupan(cakupanGrid(p, data));
@@ -646,16 +649,27 @@ const teratas = (obj, n) => Object.entries(obj).sort((a, b) => b[1] - a[1]).slic
 const horizontal = { indexAxis: 'y', scales: { x: { beginAtZero: true, grid: { color: '#dcece5' } }, y: { grid: { display: false } } } };
 
 const NAMA_BULAN = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'];
-const bulanCocok = (f, iso) => !f.bulan || +String(iso || '').slice(5, 7) === f.bulan;
+// Periode = dari (tahun, bulan) sampai (tahun, bulan), dibandingkan sebagai kunci "YYYY-MM".
+const kunciBulan = (t, b) => `${t}-${String(b).padStart(2, '0')}`;
+const periodeCocok = (f, iso) => { const k = String(iso || '').slice(0, 7); return k >= kunciBulan(f.dari, f.bd) && k <= kunciBulan(f.sampai, f.bs); };
+function labelRentang(f) {
+  const B = NAMA_BULAN;
+  if (f.bd === 1 && f.bs === 12) return f.dari === f.sampai ? `tahun ${f.dari}` : `${f.dari}–${f.sampai}`;
+  if (f.dari === f.sampai) return f.bd === f.bs ? `${B[f.bd - 1]} ${f.dari}` : `${B[f.bd - 1]}–${B[f.bs - 1]} ${f.dari}`;
+  return `${B[f.bd - 1]} ${f.dari}–${B[f.bs - 1]} ${f.sampai}`;
+}
 
 function filter() {
-  return { dari: +$('dari').value, sampai: +$('sampai').value, bulan: +$('bulan').value || 0, kawasan: $('kawasan').value, tim: $('tim').value, kat: $('kategori').value, sub: $('sub').value, langgar: $('langgar').checked };
+  let dari = +$('dari').value, sampai = +$('sampai').value, bd = +$('bulanDari').value || 1, bs = +$('bulanSampai').value || 12;
+  // Awal lebih lambat dari akhir: ditukar supaya tetap ada hasil.
+  if (kunciBulan(dari, bd) > kunciBulan(sampai, bs)) [dari, bd, sampai, bs] = [sampai, bs, dari, bd];
+  return { dari, sampai, bd, bs, kawasan: $('kawasan').value, tim: $('tim').value, kat: $('kategori').value, sub: $('sub').value, langgar: $('langgar').checked };
 }
 
 function terapkan() {
   const f = filter();
   const data = semua.filter(r =>
-    r.tahun >= f.dari && r.tahun <= f.sampai && bulanCocok(f, r.waktu) &&
+    periodeCocok(f, r.waktu) &&
     (!f.kawasan || r.kawasan === f.kawasan) && (!f.tim || r.tim === f.tim) && (!f.kat || r.kategori === f.kat) &&
     (!f.sub || r.subkategori === f.sub) && (!f.langgar || r.pelanggaran === true));
 
@@ -669,7 +683,7 @@ function terapkan() {
   $('sSpesies').textContent = fmt(unik(data.map(r => r.spesies_satwa)).length);
   effort(f, data);
   saringJalur(f);
-  $('rentang').textContent = `${f.bulan ? NAMA_BULAN[f.bulan - 1] + ' ' : ''}${f.dari}–${f.sampai}${f.kawasan ? ' · ' + f.kawasan : ''}${f.tim ? ' · ' + f.tim : ''}${f.kat ? ' · ' + f.kat : ''}${f.sub ? ' · ' + f.sub : ''}${f.langgar ? ' · pelanggaran' : ''}`;
+  $('rentang').textContent = `${labelRentang(f).replace(/^tahun /, '')}${f.kawasan ? ' · ' + f.kawasan : ''}${f.tim ? ' · ' + f.tim : ''}${f.kat ? ' · ' + f.kat : ''}${f.sub ? ' · ' + f.sub : ''}${f.langgar ? ' · pelanggaran' : ''}`;
 
   // Per tahun, ditumpuk per kategori
   const tahun = []; for (let t = f.dari; t <= f.sampai; t++) tahun.push(t);
@@ -760,14 +774,15 @@ function legenda() {
   isiTim();
   isiSelect($('kategori'), unik(semua.map(r => r.kategori)));
   isiSub(); legenda();
-  NAMA_BULAN.forEach((b, i) => $('bulan').add(new Option(b, i + 1)));
-  ['dari', 'sampai', 'bulan', 'tim', 'sub', 'langgar', 'erSkala'].forEach(id => $(id).addEventListener('change', terapkan));
+  NAMA_BULAN.forEach((b, i) => { $('bulanDari').add(new Option(b, i + 1)); $('bulanSampai').add(new Option(b, i + 1)); });
+  $('bulanDari').value = 1; $('bulanSampai').value = 12;
+  ['dari', 'sampai', 'bulanDari', 'bulanSampai', 'tim', 'sub', 'langgar', 'erSkala'].forEach(id => $(id).addEventListener('change', terapkan));
   $('kawasan').addEventListener('change', () => {
     isiTim(); terapkan(); fokus();
   });
   $('kategori').addEventListener('change', () => { isiSub(); terapkan(); });
   $('reset').addEventListener('click', () => {
-    $('dari').value = tahun[0]; $('sampai').value = tahun[tahun.length - 1]; $('bulan').value = '';
+    $('dari').value = tahun[0]; $('sampai').value = tahun[tahun.length - 1]; $('bulanDari').value = 1; $('bulanSampai').value = 12;
     isiKawasan(); $('kawasan').value = ''; isiTim(); $('kategori').value = ''; isiSub(); $('langgar').checked = false; terapkan(); fokus();
   });
   sudahSiap = true;
@@ -778,7 +793,7 @@ function legenda() {
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
 <script src="impor.js?v=20261126a"></script>
 <script src="kelola.js?v=20261126a"></script>
-<script src="laporan.js?v=20261126a"></script>
+<script src="laporan.js?v=20261126b"></script>
 <script>
 $('btnKelola').addEventListener('click', () => Kelola.buka());
 // Laporan mengikuti filter aktif. Admin yang login boleh memilih versi internal (dengan kolom privat).

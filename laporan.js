@@ -1,6 +1,6 @@
 // Laporan Word (.docx) dari data yang sedang difilter, dibuat di browser dengan pustaka docx (dimuat saat dipakai).
 // Narasi disusun dari kalimat pola + angka (tanpa AI). Versi internal (admin login) menambah kolom privat.
-// Memakai global index.html: semua, patroli, filter, bulanCocok, NAMA_BULAN, TLGC, WARNA_KAT, WARNA_ZONA, WARNA_HABITAT, lapisZona, unik, fmt.
+// Memakai global index.html: semua, patroli, filter, periodeCocok, labelRentang, NAMA_BULAN, TLGC, WARNA_KAT, WARNA_ZONA, WARNA_HABITAT, lapisZona, unik, fmt.
 const Laporan = (() => {
   let docxSiap;
   const muatDocx = () => docxSiap ??= new Promise((ok, gagal) => {
@@ -24,10 +24,10 @@ const Laporan = (() => {
 
   // Data dengan aturan yang sama seperti peta & panel Statistik.
   function pilih(f) {
-    const temuan = semua.filter(r => r.tahun >= f.dari && r.tahun <= f.sampai && bulanCocok(f, r.waktu) &&
+    const temuan = semua.filter(r => periodeCocok(f, r.waktu) &&
       (!f.kawasan || r.kawasan === f.kawasan) && (!f.tim || r.tim === f.tim) && (!f.kat || r.kategori === f.kat) &&
       (!f.sub || r.subkategori === f.sub) && (!f.langgar || r.pelanggaran === true));
-    const pat = patroli.filter(x => x.tahun >= f.dari && x.tahun <= f.sampai && bulanCocok(f, x.mulai) &&
+    const pat = patroli.filter(x => periodeCocok(f, x.mulai) &&
       (!f.kawasan || x.kawasan === f.kawasan) && (!f.tim || x.tim === f.tim));
     const km = pat.reduce((s, x) => s + x.km, 0);
     // Temuan unik per hari patroli (sama dengan encounter rate di panel).
@@ -42,19 +42,12 @@ const Laporan = (() => {
     return { temuan, pat, km, nUnik, unikPer, er: km > 0 ? nUnik / km : null, cak: cakupanGrid(pat, temuan) };
   }
 
-  function labelPeriode(f) {
-    if (f.bulan) return `${NAMA_BULAN[f.bulan - 1]} ${f.dari === f.sampai ? f.dari : `${f.dari}–${f.sampai}`}`;
-    return f.dari === f.sampai ? `tahun ${f.dari}` : `${f.dari}–${f.sampai}`;
-  }
+  const labelPeriode = labelRentang;
   // Periode pembanding dengan panjang yang sama tepat sebelum periode laporan.
   function periodeSebelum(f) {
-    if (f.bulan && f.dari === f.sampai) {
-      const t = f.bulan === 1 ? f.dari - 1 : f.dari, b = f.bulan === 1 ? 12 : f.bulan - 1;
-      return { ...f, dari: t, sampai: t, bulan: b };
-    }
-    if (f.bulan) return null; // bulan yang sama di beberapa tahun: tidak ada pembanding yang jelas
-    const n = f.sampai - f.dari + 1;
-    return { ...f, dari: f.dari - n, sampai: f.sampai - n };
+    const awal = f.dari * 12 + f.bd - 1, n = f.sampai * 12 + f.bs - 1 - awal + 1;
+    const a = awal - n, b = awal - 1;
+    return { ...f, dari: Math.floor(a / 12), bd: a % 12 + 1, sampai: Math.floor(b / 12), bs: b % 12 + 1 };
   }
   const arah = (baru, lama) => {
     const p = Math.round((baru - lama) / lama * 100);
@@ -71,7 +64,7 @@ const Laporan = (() => {
         : laut || darat ? ` (${[laut && `${laut} laut`, darat && `${darat} darat`].filter(Boolean).join(', ')})` : '';
       let s = `Selama ${per}, ${timTeks} melakukan **${fmt(a.pat.length)} patroli${tipe.startsWith(' (') ? '' : tipe}**${tipe.startsWith(' (') ? tipe : ''} sepanjang **${d1(a.km)} km**.`;
       if (b && b.km > 0) s += ` Jarak patroli ${arah(a.km, b.km)} ${labelPeriode(fb)} (${d1(b.km)} km).`;
-      else if (b && fb.sampai >= Math.min(...patroli.map(p => p.tahun))) s += ` Tidak ada data patroli pada ${labelPeriode(fb)} sebagai pembanding.`;
+      else if (b && kunciBulan(fb.sampai, fb.bs) >= patroli.map(p => p.mulai.slice(0, 7)).sort()[0]) s += ` Tidak ada data patroli pada ${labelPeriode(fb)} sebagai pembanding.`;
       out.push(s);
       const c = a.cak;
       if (c?.kunj.length) {
