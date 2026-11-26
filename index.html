@@ -58,7 +58,8 @@
   .cek input { accent-color: var(--koral); width: 16px; height: 16px; }
   .reset { margin-top: 14px; width: 100%; padding: 8px; border-radius: 8px; border: 1px solid var(--laut); background: #fff; color: var(--laut); cursor: pointer; font-weight: 600; }
   .reset:hover { background: var(--laut); color: #fff; }
-  .unduh-laporan { width: 100%; margin: 0 0 12px; padding: 9px; border-radius: 8px; border: 0; background: var(--laut); color: #fff; cursor: pointer; font-weight: 700; }
+  .unduh { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 0 0 12px; }
+  .unduh-laporan { width: 100%; margin: 0; padding: 9px; border-radius: 8px; border: 0; background: var(--laut); color: #fff; cursor: pointer; font-weight: 700; }
   .unduh-laporan:hover { background: var(--laut-tua); }
   .unduh-laporan:disabled { opacity: .6; cursor: progress; }
 
@@ -185,7 +186,10 @@
 <aside class="panel kanan" id="pStat">
   <h2>Ringkasan</h2>
   <p class="ket" id="rentang"></p>
-  <button class="unduh-laporan" id="btnLaporan">Unduh laporan Word (.docx)</button>
+  <div class="unduh">
+    <button class="unduh-laporan" id="btnLaporan">Unduh laporan Word (.docx)</button>
+    <button class="unduh-laporan" id="btnExcel">Unduh tabel Excel (.xlsx)</button>
+  </div>
   <p class="ket" id="laporanPesan" style="margin:-6px 0 10px" hidden></p>
   <div class="angka">
     <div><b id="sTotal">–</b><span>temuan</span></div>
@@ -791,9 +795,9 @@ function legenda() {
 })();
 </script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
-<script src="impor.js?v=20261126a"></script>
+<script src="impor.js?v=20261126b"></script>
 <script src="kelola.js?v=20261126a"></script>
-<script src="laporan.js?v=20261126b"></script>
+<script src="laporan.js?v=20261126c"></script>
 <script>
 $('btnKelola').addEventListener('click', () => Kelola.buka());
 // Laporan mengikuti filter aktif. Admin yang login boleh memilih versi internal (dengan kolom privat).
@@ -806,6 +810,17 @@ $('btnLaporan').addEventListener('click', async () => {
     const nama = await Laporan.buat({ internal });
     p.textContent = `Selesai: ${nama}. Untuk Google Docs, unggah ke Drive lalu Buka dengan > Google Dokumen.`;
   } catch (e) { p.textContent = 'Gagal membuat laporan: ' + e.message; }
+  finally { b.disabled = false; }
+});
+// Tabel Excel lengkap dari data terfilter: Ringkasan, Temuan, Patroli, Per bulan, Grid.
+$('btnExcel').addEventListener('click', async () => {
+  const b = $('btnExcel'), p = $('laporanPesan');
+  b.disabled = true; p.hidden = false; p.textContent = 'Menyusun tabel Excel…';
+  try {
+    const internal = await Kelola.adminAktif() &&
+      confirm('Buat versi INTERNAL (memuat nama pelaku, nama kapal, nakhoda, keterangan, dan anggota patroli)? Pilih Batal untuk versi publik.');
+    p.textContent = `Selesai: ${await Laporan.excel({ internal })}.`;
+  } catch (e) { p.textContent = 'Gagal membuat tabel Excel: ' + e.message; }
   finally { b.disabled = false; }
 });
 </script>

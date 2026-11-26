@@ -576,5 +576,5 @@ const Impor = (() => {
     return 'uji impor selesai (lihat console untuk assertion gagal)';
   }
 
-  return { baca, olahBaris, olahMaster, rapikanNama, jamLonggar, ambilAppsScript, uji, WAJIB, parseSmartJson, parseGabungan, susunJson, labelTemuan, labelPatroli, KOLOM_ATRIBUT, dalamBatas, kompresFoto };
+  return { muatXlsx, baca, olahBaris, olahMaster, rapikanNama, jamLonggar, ambilAppsScript, uji, WAJIB, parseSmartJson, parseGabungan, susunJson, labelTemuan, labelPatroli, KOLOM_ATRIBUT, dalamBatas, kompresFoto };
 })();

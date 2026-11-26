@@ -457,5 +457,71 @@ const Laporan = (() => {
     return nama;
   }
 
-  return { buat, narasi, pilih, periodeSebelum, labelPeriode, peta };
+  // ---------- tabel Excel lengkap (data terfilter, satu sheet per tabel) ----------
+  async function excel({ internal = false } = {}) {
+    await Impor.muatXlsx();
+    const f = filter(), a = pilih(f), per = labelPeriode(f);
+    let privT = {}, privP = {};
+    if (internal) ({ temuan: privT, patroli: privP } = await Kelola.dataPrivat(a.temuan.map(r => r.id), a.pat.map(p => p.id)));
+    const ya = v => v === true ? 'Ya' : v === false ? 'Tidak' : null;
+    const bulat = (v, n = 2) => v == null ? null : Math.round(v * 10 ** n) / 10 ** n;
+    const nTemuan = new Map();
+    a.temuan.forEach(r => r.patroli_id && nTemuan.set(r.patroli_id, (nTemuan.get(r.patroli_id) || 0) + 1));
+
+    const filterTeks = [f.kawasan && `kawasan ${f.kawasan}`, f.tim && `tim ${f.tim}`, f.kat && `kategori ${f.kat}`, f.sub && `jenis ${f.sub}`, f.langgar && 'hanya pelanggaran'].filter(Boolean).join('; ');
+    const ringkasan = [
+      ['Periode', per], ['Filter', filterTeks || 'semua'], ['Versi', internal ? 'INTERNAL – tidak untuk disebarkan' : 'publik'], ['Diunduh', new Date().toLocaleString('id-ID')], [],
+      ['Temuan', a.temuan.length], ['Pelanggaran', a.temuan.filter(r => r.pelanggaran).length], ['Patroli', a.pat.length], ['Km patroli', bulat(a.km, 1)],
+      ['Temuan unik', a.nUnik], ['Temuan unik per km', bulat(a.er, 3)],
+      ['Cakupan grid (% luas)', bulat(a.cak?.persen, 1)], ['Sel grid dikunjungi', a.cak ? `${a.cak.kunj.length} dari ${a.cak.sel.length}` : null]
+    ];
+
+    const temuan = a.temuan.map(r => ({
+      'ID': r.id, 'Waktu': r.waktu?.replace('T', ' ').slice(0, 16), 'Kawasan': r.kawasan, 'Tim': r.tim, 'Kategori': r.kategori, 'Subkategori': r.subkategori,
+      'Jenis temuan': r.jenis_observasi, 'Spesies satwa': r.spesies_satwa, 'Spesies tumbuhan': r.spesies_tumbuhan, 'Jenis kelamin': r.jenis_kelamin, 'Umur': r.umur,
+      'Jumlah': r.jumlah, 'Satuan': r.satuan, 'Jumlah orang': r.total_orang, 'Pelanggaran': ya(r.pelanggaran), 'Tindakan': r.tindakan, 'Kondisi': r.kondisi_fitur,
+      'Zonasi': r.zonasi_kawasan, 'Lokasi temuan': r.lokasi_temuan, 'Usia temuan': r.usia_temuan,
+      'Perlu tindak lanjut': ya(r.perlu_tindak_lanjut), 'Status tindak lanjut': r.status_tindak_lanjut, 'Tgl tindak lanjut': r.tgl_tindak_lanjut,
+      'Jenis kapal': r.kapal?.jenis, 'GT kapal': r.kapal?.gt, 'Bahan kapal': r.kapal?.bahan, 'Kegiatan kapal': r.kapal?.kegiatan, 'Alat tangkap': r.kapal?.alat,
+      'Hasil tangkapan': r.kapal?.hasil_tangkapan, 'Berat tangkapan': r.kapal?.berat_tangkapan, 'Awak kapal': r.kapal?.awak, 'Asal kapal': r.kapal?.asal,
+      'Dokumen kapal': r.kapal?.dokumen,
+      ...(internal ? { 'Pelaku': privT[r.id]?.nama, 'Nama kapal': privT[r.id]?.nama_kapal, 'Nakhoda': privT[r.id]?.nakhoda, 'Keterangan': privT[r.id]?.info_lain } : {}),
+      'ID patroli': r.patroli_id, 'Bujur': r.lon, 'Lintang': r.lat, 'Foto': (r.foto || []).map(urlFoto).join(' ')
+    }));
+
+    const patrolis = a.pat.map(p => ({
+      'ID patroli': p.id, 'Sumber': p.sumber, 'Kawasan': p.kawasan, 'Tim': p.tim, 'Tipe': p.tipe_patroli === 'MARINE' ? 'Laut' : p.tipe_patroli === 'GROUND' ? 'Darat' : p.tipe_patroli,
+      'Stasiun': p.stasiun, 'Tujuan': p.tujuan, 'Mulai': p.mulai?.replace('T', ' ').slice(0, 16), 'Selesai': p.selesai?.replace('T', ' ').slice(0, 16),
+      'Km': bulat(p.km, 2), 'Jumlah anggota': p.jumlah_anggota, 'Bersenjata': ya(p.bersenjata), 'Temuan': nTemuan.get(p.id) || 0,
+      ...(internal ? { 'Ketua tim': privP[p.id]?.ketua_tim, 'Anggota': privP[p.id]?.anggota } : {})
+    }));
+
+    const perBln = new Map();
+    for (const p of a.pat) { const e = perBln.get(p.mulai.slice(0, 7)) ?? perBln.set(p.mulai.slice(0, 7), { pat: 0, km: 0, temuan: 0, unik: 0 }).get(p.mulai.slice(0, 7)); e.pat++; e.km += p.km; }
+    for (const r of a.temuan) { const k = r.waktu.slice(0, 7); const e = perBln.get(k) ?? perBln.set(k, { pat: 0, km: 0, temuan: 0, unik: 0 }).get(k); e.temuan++; }
+    for (const [t, s] of a.unikPer) perBln.get(t.slice(0, 7)) && (perBln.get(t.slice(0, 7)).unik += s.size);
+    const bulanan = [...perBln.keys()].sort().map(k => { const e = perBln.get(k); return {
+      'Bulan': labelBulan(k), 'Patroli': e.pat, 'Km': bulat(e.km, 1), 'Temuan': e.temuan, 'Temuan unik': e.unik, 'Temuan unik per km': e.km > 0 ? bulat(e.unik / e.km, 3) : null }; });
+
+    const grid = (a.cak?.sel || []).map(s => ({ 'Sel': s.kode, 'Dikunjungi': s.km > 0 ? 'Ya' : 'Tidak', 'Km': bulat(s.km, 2), 'Patroli': s.patroli.size, 'Bulan': s.bulan.size, 'Temuan': s.temuan, 'Luas km²': bulat(s.km2, 2) }))
+      .sort((x, y) => y.Km - x.Km || x.Sel.localeCompare(y.Sel));
+
+    const wb = XLSX.utils.book_new();
+    const sheet = (nama, isi, aoa = false) => {
+      const ws = aoa ? XLSX.utils.aoa_to_sheet(isi) : XLSX.utils.json_to_sheet(isi.length ? isi : [{ 'Keterangan': 'Tidak ada data untuk filter ini.' }]);
+      const kolom = aoa ? [[0], [1]] : Object.keys(isi[0] || { Keterangan: 1 }).map(k => [k]);
+      ws['!cols'] = kolom.map(([k]) => ({ wch: aoa ? (k === 0 ? 24 : 40) : Math.min(40, Math.max(String(k).length, ...isi.slice(0, 200).map(r => String(r[k] ?? '').length)) + 2) }));
+      XLSX.utils.book_append_sheet(wb, ws, nama);
+    };
+    sheet('Ringkasan', ringkasan, true);
+    sheet('Temuan', temuan);
+    sheet('Patroli', patrolis);
+    sheet('Per bulan', bulanan);
+    sheet('Grid', grid);
+    const nama = `Tabel-Patroli-TLGC_${per.replace(/[^\w–-]+/g, '-')}${internal ? '_INTERNAL' : ''}.xlsx`;
+    XLSX.writeFile(wb, nama);
+    return nama;
+  }
+
+  return { buat, excel, narasi, pilih, periodeSebelum, labelPeriode, peta };
 })();
